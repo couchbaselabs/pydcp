@@ -39,6 +39,9 @@ class Connection(threading.Thread):
             self.socket.close()
 
     def queue_operation(self, op):
+        if not self.running:
+            op.network_error()
+            return
         for o in self.ops:
             assert op.opaque != o.opaque
         self.ops.append(op)

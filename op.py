@@ -32,7 +32,7 @@ class Operation():
         return self.responses.qsize() > 0
 
     def next_response(self):
-        if self.ended:
+        if self.ended and self.responses.qsize() == 0:
             return None
         return self.responses.get(True)
 
