@@ -18,12 +18,12 @@ class UprTestCase(unittest.TestCase):
     def test_open_consumer_connection_command(self):
         op = self.client.open_consumer("mystream")
         response = op.next_response()
-        assert response['status'] == ERR_NOT_SUPPORTED
+        assert response['status'] == SUCCESS
 
     def test_open_producer_connection_command(self):
         op = self.client.open_producer("mystream")
         response = op.next_response()
-        assert response['status'] == ERR_NOT_SUPPORTED
+        assert response['status'] == SUCCESS
 
     @unittest.skip("Add stream response is broken in memcached")
     def test_add_stream_command(self):
