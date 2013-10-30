@@ -3,7 +3,7 @@ import logging
 import unittest
 
 from constants import *
-from client import UprClient
+from uprclient import UprClient
 
 HOST = '127.0.0.1'
 PORT = 12000
