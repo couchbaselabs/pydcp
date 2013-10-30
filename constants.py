@@ -22,6 +22,9 @@ CMD_EXPIRATION       = 0x59
 CMD_FLUSH            = 0x5a
 CMD_SET_VB_STATE     = 0x5b
 
+# Memcached command opcodes
+
+CMD_STATS = 0x10
 
 # Flag values
 FLAG_OPEN_CONSUMER = 0x00

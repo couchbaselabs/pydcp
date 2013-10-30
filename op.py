@@ -152,4 +152,25 @@ class StreamRequest(Operation):
                            self.end_seqno, self.vb_uuid, self.high_seqno)
 
 
+class Stats(Operation):
+    def __init__(self, type):
+        Operation.__init__(self, CMD_STATS, 0, 0, 0, type, '')
+        self.stats = {}
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        assert cas == 0
+        assert extlen == 0
+        self.stats[body[0:keylen]] = body[keylen:]
+
+        if keylen > 0:
+            return False
+
+        self.end = True
+        self.responses.put({ 'opcode': opcode,
+                             'status': status,
+                             'value' : self.stats })
+        return True
+
+    def _get_extras(self):
+        return ''
 

@@ -51,9 +51,11 @@ class Connection(threading.Thread):
         self.running = True
 
         bytes_read = ''
+        rd_timeout = 1
         desc = [self.socket]
         while self.running:
-            readers, writers, errors = select.select(desc, [], [], 1)
+            readers, writers, errors = select.select(desc, [], [], rd_timeout)
+            rd_timeout = 1
 
             for reader in readers:
                 data = reader.recv(1024)
@@ -67,6 +69,7 @@ class Connection(threading.Thread):
                     struct.unpack(PKT_HEADER_FMT, bytes_read[0:HEADER_LEN])
                 
                 if bytes_read >= (HEADER_LEN+bodylen):
+                    rd_timeout = 0
                     body = bytes_read[HEADER_LEN:HEADER_LEN+bodylen]
                     bytes_read = bytes_read[HEADER_LEN+bodylen:]
                     for op in self.ops:
