@@ -29,7 +29,7 @@ class Operation():
         self.ended = True
 
     def has_response(self):
-        return self.responses.qsize() > 0
+        return self.responses.qsize() > 0 or not self.ended
 
     def next_response(self):
         if self.ended and self.responses.qsize() == 0:
@@ -138,14 +138,24 @@ class StreamRequest(Operation):
         self.high_seqno = high_seqno
 
     def add_response(self, opcode, keylen, extlen, status, cas, body):
-        assert cas == 0
-        assert keylen == 0
-        assert extlen == 0
-        self.responses.put({ 'opcode' : opcode,
-                             'status' : status,
-                             'value'  : body })
-        self.end = True
-        return True
+        if opcode == CMD_STREAM_REQ:
+            assert cas == 0
+            assert keylen == 0
+            assert extlen == 0
+            self.responses.put({ 'opcode' : opcode,
+                                 'status' : status })
+        elif opcode == CMD_STREAM_END:
+            assert cas == 0
+            assert keylen == 0
+            assert extlen == 4
+            flags = struct.unpack(">I", body[0:4])[0]
+            self.responses.put({ 'opcode' : opcode,
+                                 'status' : status,
+                                 'flags'  : flags })
+            self.ended = True
+            return True
+
+        return False
 
     def _get_extras(self):
         return struct.pack(">IIQQQQ", self.flags, 0, self.start_seqno,

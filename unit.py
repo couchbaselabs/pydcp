@@ -72,11 +72,20 @@ class UprTestCase(unittest.TestCase):
         response = op.next_response()
         assert response['status'] == ERR_NOT_SUPPORTED
 
-    @unittest.skip("Causes issue with test rerun")
+    """Basic upr stream request
+
+    Opens a producer connection ans sends a stream request command for
+    vbucket 0. Since no items exist in the server we should accept the
+    stream request and then send back a stream end message."""
     def test_stream_request_command(self):
-        op = self.upr_client.stream_req(0, 0, 0, 0, 0, 0)
+        op = self.upr_client.open_producer("mystream")
         response = op.next_response()
-        assert response['status'] == ERR_NOT_SUPPORTED
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, 0, 0, 0, 0)
+        while op.has_response():
+            response = op.next_response()
+            assert response['status'] == SUCCESS
 
 class McdTestCase(unittest.TestCase):
     def setUp(self):
