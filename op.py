@@ -7,14 +7,14 @@ import struct
 from constants import *
 
 class Operation():
-    opaque_counter = 0
+    opaque_counter = 0xFFFF0000
 
     def __init__(self, opcode, data_type, vbucket, cas, key, value):
-        Operation.opaque = Operation.opaque_counter + 1
+        Operation.opaque_counter = Operation.opaque_counter + 1
         self.opcode = opcode
         self.data_type = data_type
         self.vbucket = vbucket
-        self.opaque = Operation.opaque
+        self.opaque = Operation.opaque_counter
         self.cas = cas
         self.key = key
         self.value = value
@@ -82,12 +82,15 @@ class AddStream(Operation):
     def add_response(self, opcode, keylen, extlen, status, cas, body):
         assert cas == 0
         assert keylen == 0
-        assert extlen == 4
-        opaque = struct.unpack(">I", body[0:4])
-        self.responses.put({ 'opcode' : opcode,
-                             'status' : status,
-                             'opaque' : opaque,
-                             'value'  : body[4:] })
+
+        opaque = None
+        if extlen == 4:
+            opaque = struct.unpack(">I", body[0:4])
+        self.responses.put({ 'opcode'        : opcode,
+                             'status'        : status,
+                             'stream_opaque' : opaque,
+                             'extlen'        : extlen,
+                             'value'         : body[4:] })
         self.ended = True
         return True
 

@@ -56,11 +56,49 @@ class UprTestCase(unittest.TestCase):
         response = op.next_response()
         assert 'mystream:type' not in response['value']
 
-    @unittest.skip("Add stream response is broken in memcached")
+    """Basic add stream test
+
+    This test verifies a simple add stream command. It expects that a stream
+    request message will be sent to the producer before a response for the
+    add stream command is returned."""
     def test_add_stream_command(self):
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
         op = self.upr_client.add_stream(0, 0)
         response = op.next_response()
-        assert response['status'] == ERR_NOT_SUPPORTED
+        assert response['status'] == SUCCESS
+
+    """Add stream command with no consumer vbucket
+
+    Attempts to add a stream when no vbucket exists on the consumer. The
+    client shoudl expect a not my vbucket response immediately"""
+    def test_add_stream_not_my_vbucket(self):
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(1025, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_NOT_MY_VBUCKET
+
+    """Add stream when stream exists
+
+    Creates a stream and then attempts to create another stream for the
+    same vbucket. Expects to fail with an exists error."""
+    def test_add_stream_exists(self):
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_KEY_EEXISTS
 
     def test_close_stream_command(self):
         op = self.upr_client.close_stream(0)

@@ -55,7 +55,7 @@ class Connection(threading.Thread):
         desc = [self.socket]
         while self.running:
             readers, writers, errors = select.select(desc, [], [], rd_timeout)
-            rd_timeout = 1
+            rd_timeout = .25
 
             for reader in readers:
                 data = reader.recv(1024)
@@ -64,23 +64,39 @@ class Connection(threading.Thread):
                     self._connection_lost()
                 bytes_read += data
 
-            if len(bytes_read) >= HEADER_LEN:
+            while len(bytes_read) >= HEADER_LEN:
                 magic, opcode, keylen, extlen, dt, status, bodylen, opaque, cas=\
                     struct.unpack(PKT_HEADER_FMT, bytes_read[0:HEADER_LEN])
-                
-                if bytes_read >= (HEADER_LEN+bodylen):
-                    rd_timeout = 0
-                    body = bytes_read[HEADER_LEN:HEADER_LEN+bodylen]
-                    bytes_read = bytes_read[HEADER_LEN+bodylen:]
-                    for op in self.ops:
-                        if op.opaque == opaque:
-                            rm = op.add_response(opcode, keylen, extlen,
+
+                if len(bytes_read) < (HEADER_LEN+bodylen):
+                    break
+
+                rd_timeout = 0
+                body = bytes_read[HEADER_LEN:HEADER_LEN+bodylen]
+                bytes_read = bytes_read[HEADER_LEN+bodylen:]
+
+                if not self.ops:
+                    self._handle_random_opaque(opcode, status, opaque)
+
+                for op in self.ops:
+                    if op.opaque == opaque:
+                        rm = op.add_response(opcode, keylen, extlen,
                                                  status, cas, body)
-                            if rm:
-                                self.ops.remove(op)
-                            break
-                        else:
-                            print 'Got response but have no matching op'
+                        if rm:
+                            self.ops.remove(op)
+                        break
+                    else:
+                        self._handle_random_opaque(opcode, status, opaque)
+
+    def _handle_random_opaque(self, opcode, vbucket, opaque):
+        if opcode == CMD_STREAM_REQ:
+            logging.info("Recieve stream request")
+            resp = struct.pack(PKT_HEADER_FMT, RES_MAGIC, opcode,
+                               0, 0, 0, vbucket, 0, opaque, 0)
+            logging.info("Sending stream response")
+            self.socket.send(resp)
+        logging.debug('No matching op for resp (opcode %d)(opaque %d)'
+                      % (opcode, opaque))
 
     def _connection_lost(self):
         self.running = False
