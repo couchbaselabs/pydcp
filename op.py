@@ -1,6 +1,7 @@
 
 import binascii
 import constants
+import logging
 import Queue
 import struct
 
@@ -142,12 +143,14 @@ class StreamRequest(Operation):
 
     def add_response(self, opcode, keylen, extlen, status, cas, body):
         if opcode == CMD_STREAM_REQ:
+            logging.info("(Stream Request) Received OK")
             assert cas == 0
             assert keylen == 0
             assert extlen == 0
             self.responses.put({ 'opcode' : opcode,
                                  'status' : status })
         elif opcode == CMD_STREAM_END:
+            logging.info("(Stream Request) Received stream end")
             assert cas == 0
             assert keylen == 0
             assert extlen == 4
@@ -157,6 +160,33 @@ class StreamRequest(Operation):
                                  'flags'  : flags })
             self.ended = True
             return True
+        elif opcode == CMD_MUTATION:
+            logging.info("(Stream Request) Received mutation")
+            by_seqno, rev_seqno, flags, exp, lock_time = \
+                struct.unpack(">QQIII", body[0:28])
+            key = body[28:28+keylen]
+            value = body[28+keylen:]
+            self.responses.put({ 'opcode'     : opcode,
+                                 'status'     : status,
+                                 'by_seqno'   : by_seqno,
+                                 'rev_seqno'  : rev_seqno,
+                                 'flags'      : flags,
+                                 'expiration' : exp,
+                                 'lock_time'  : lock_time,
+                                 'key'        : key,
+                                 'value'      : value })
+        elif opcode == CMD_DELETION:
+            logging.info("(Stream Request) Received deletion")
+            by_seqno, rev_seqno = struct.unpack(">QQ", body[0:16])
+            key = body[16:16+keylen]
+            self.responses.put({ 'opcode'     : opcode,
+                                 'status'     : status,
+                                 'by_seqno'   : by_seqno,
+                                 'rev_seqno'  : rev_seqno,
+                                 'key'        : key })
+                                 
+        else:
+            logging.error("(Stream Request) Unknown response: %s" % opcode)
 
         return False
 
