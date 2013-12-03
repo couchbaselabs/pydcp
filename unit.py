@@ -162,6 +162,50 @@ class UprTestCase(ParametrizedTestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
+    @skipUnlessMcd
+    def test_stream_request_with_ops(self):
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket-seqno')
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        end_seqno = int(resp['value']['vb_0'])
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
+        while op.has_response():
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+            print response
+
+    @skipUnlessMcd
+    def test_stream_request_with_deletes(self):
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket-seqno')
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        end_seqno = int(resp['value']['vb_0'])
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
+        while op.has_response():
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+            print response
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.client = McdClient(self.host, self.port)
