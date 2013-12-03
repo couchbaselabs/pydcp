@@ -112,7 +112,7 @@ class UprTestCase(unittest.TestCase):
 
     """Basic upr stream request
 
-    Opens a producer connection ans sends a stream request command for
+    Opens a producer connection and sends a stream request command for
     vbucket 0. Since no items exist in the server we should accept the
     stream request and then send back a stream end message."""
     def test_stream_request_command(self):
