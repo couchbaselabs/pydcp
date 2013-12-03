@@ -15,5 +15,15 @@ class McdClient():
         self.conn.queue_operation(op)
         return op
 
+    def set(self, key, value, vbucket, flags, exp):
+        op = Set(key, value, vbucket, flags, exp)
+        self.conn.queue_operation(op)
+        return op
+
+    def flush(self):
+        op = Flush()
+        self.conn.queue_operation(op)
+        return op
+
     def shutdown(self):
         self.conn.close()

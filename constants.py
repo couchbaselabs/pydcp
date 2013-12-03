@@ -24,6 +24,8 @@ CMD_SET_VB_STATE     = 0x5b
 
 # Memcached command opcodes
 
+CMD_SET   = 0x01
+CMD_FLUSH = 0x08
 CMD_STATS = 0x10
 
 # Flag values

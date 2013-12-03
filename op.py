@@ -164,6 +164,7 @@ class StreamRequest(Operation):
         return struct.pack(">IIQQQQ", self.flags, 0, self.start_seqno,
                            self.end_seqno, self.vb_uuid, self.high_seqno)
 
+############################ Memcached Operations ############################
 
 class Stats(Operation):
     def __init__(self, type):
@@ -187,3 +188,37 @@ class Stats(Operation):
     def _get_extras(self):
         return ''
 
+class Set(Operation):
+    def __init__(self, key, value, vbucket, flags, exp):
+        Operation.__init__(self, CMD_SET, 0, vbucket, 0, key, value)
+        self.flags = flags
+        self.exp = exp
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        assert extlen == 0
+        assert keylen == 0
+
+        self.end = True
+        self.responses.put({ 'opcode': opcode,
+                             'status': status,
+                             'cas'   : cas })
+        return True
+
+    def _get_extras(self):
+        return struct.pack(">II", self.flags, self.exp)
+
+class Flush(Operation):
+    def __init__(self):
+        Operation.__init__(self, CMD_FLUSH, 0, 0, 0, '', '')
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        assert extlen == 0
+        assert keylen == 0
+
+        self.end = True
+        self.responses.put({ 'opcode': opcode,
+                             'status': status })
+        return True
+
+    def _get_extras(self):
+        return struct.pack(">I", 0)

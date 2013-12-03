@@ -9,6 +9,15 @@ from mcdclient import McdClient
 HOST = '127.0.0.1'
 PORT = 12000
 
+def skipUnlessMcd(func):
+    def _decorator(self, *args, **kwargs):
+        if self.remote == RemoteServer.MCD:
+            func(self, *args, **kwargs)
+        else:
+            logging.warning('Skpping: Requires memcached backend')
+            return unittest.skip('')
+    return _decorator
+
 class RemoteServer:
     CB, DEV, MCD = range(3)
 
@@ -36,6 +45,9 @@ class UprTestCase(ParametrizedTestCase):
     def setUp(self):
         self.upr_client = UprClient(HOST, PORT)
         self.mcd_client = McdClient(HOST, PORT)
+        if (self.remote == RemoteServer.MCD):
+            resp = self.client.flush().next_response()
+            assert resp['status'] == SUCCESS, "Flush all is not enabled"
 
     def tearDown(self):
         self.upr_client.shutdown()
@@ -151,6 +163,9 @@ class UprTestCase(ParametrizedTestCase):
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.client = McdClient(HOST, PORT)
+        if (self.remote == RemoteServer.MCD):
+            resp = self.client.flush().next_response()
+            assert resp['status'] == SUCCESS, "Flush all is not enabled"
 
     def tearDown(self):
         self.client.shutdown()
@@ -166,3 +181,15 @@ class McdTestCase(ParametrizedTestCase):
         resp = op.next_response()
         assert resp['status'] == SUCCESS
         assert resp['value']['ep_tap_backoff_period'] == '5'
+
+    @skipUnlessMcd
+    def test_set(self):
+        print 'running'
+        op = self.client.set('key', 'value', 0, 0, 0)
+        resp = op.next_response()
+        print resp
+
+        op = self.client.stats()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        assert resp['value']['curr_items'] == '1'
