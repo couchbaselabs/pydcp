@@ -29,9 +29,11 @@ class Connection(threading.Thread):
 
     def close(self, force = False):
         if not force:
-            while len(self.ops) > 0:
+            secs = 0
+            while len(self.ops) > 0 and secs < 5:
                 time.sleep(1)
                 logging.info("Waiting for %d ops" % len(self.ops))
+                secs = secs + 1
         logging.info("Closing connection to %s:%d" % (self.host, self.port))
         if self.socket:
             self.running = False
