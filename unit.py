@@ -25,12 +25,14 @@ class ParametrizedTestCase(unittest.TestCase):
     """ TestCase classes that want to be parametrized should
         inherit from this class.
     """
-    def __init__(self, methodName, backend):
+    def __init__(self, methodName, backend, host, port):
         super(ParametrizedTestCase, self).__init__(methodName)
         self.backend = backend
+        self.host = host
+        self.port = port
 
     @staticmethod
-    def parametrize(testcase_klass, backend):
+    def parametrize(testcase_klass, backend, host, port):
         """ Create a suite containing all tests taken from the given
             subclass, passing them the parameter 'param'.
         """
@@ -38,13 +40,13 @@ class ParametrizedTestCase(unittest.TestCase):
         testnames = testloader.getTestCaseNames(testcase_klass)
         suite = unittest.TestSuite()
         for name in testnames:
-            suite.addTest(testcase_klass(name, backend))
+            suite.addTest(testcase_klass(name, backend, host, port))
         return suite
 
 class UprTestCase(ParametrizedTestCase):
     def setUp(self):
-        self.upr_client = UprClient(HOST, PORT)
-        self.mcd_client = McdClient(HOST, PORT)
+        self.upr_client = UprClient(self.host, self.port)
+        self.mcd_client = McdClient(self.host, self.port)
         if (self.backend == RemoteServer.MCD):
             resp = self.client.flush().next_response()
             assert resp['status'] == SUCCESS, "Flush all is not enabled"
@@ -162,7 +164,7 @@ class UprTestCase(ParametrizedTestCase):
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
-        self.client = McdClient(HOST, PORT)
+        self.client = McdClient(self.host, self.port)
         if (self.backend == RemoteServer.MCD):
             resp = self.client.flush().next_response()
             assert resp['status'] == SUCCESS, "Flush all is not enabled"
@@ -184,10 +186,8 @@ class McdTestCase(ParametrizedTestCase):
 
     @skipUnlessMcd
     def test_set(self):
-        print 'running'
         op = self.client.set('key', 'value', 0, 0, 0)
         resp = op.next_response()
-        print resp
 
         op = self.client.stats()
         resp = op.next_response()

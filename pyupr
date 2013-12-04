@@ -6,24 +6,26 @@ import unittest
 
 from unit import *
 
-def run_upr_testsuite(backend):
+def run_upr_testsuite(backend, host, port):
     upr_suite = unittest.TestSuite()
-    upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, backend))
+    upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, backend,
+                                                       host, port))
     unittest.TextTestRunner(verbosity=2).run(upr_suite)
 
-def run_mcd_testsuite(backend):
+def run_mcd_testsuite(backend, host, port):
     mcd_suite = unittest.TestSuite()
-    mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, backend))
+    mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, backend,
+                                                       host, port))
     unittest.TextTestRunner(verbosity=2).run(mcd_suite)
 
-def run_testsuite(suite, backend):
+def run_testsuite(suite, backend, host, port):
     if suite == 'all':
-        run_upr_testsuite(backend)
-        run_mcd_testsuite(backend)
+        run_upr_testsuite(backend, host, port)
+        run_mcd_testsuite(backend, host, port)
     elif suite == 'upr':
-        run_upr_testsuite(backend)
+        run_upr_testsuite(backend, host, port)
     elif suite == 'mcd':
-        run_mcd_testsuite(backend)
+        run_mcd_testsuite(backend, host, port)
     else:
         print "Invalid testsuite type '%s'" % suite
         sys.exit(0)
@@ -50,8 +52,14 @@ def set_log_level(level):
         logging.basicConfig(level=logging.DEBUG)
 
 def main():
-    parser = argparse.ArgumentParser(description='Upr unit test framework')
+    parser = argparse.ArgumentParser(prog='pyupr',
+                                     usage='%(prog)s [options]',
+                                     add_help=False)
 
+    parser.add_argument('-h', '--host', default='127.0.0.1',
+                        help='the ip address of the server')
+    parser.add_argument('-p', '--port', default=11211,
+                        help='the port the server is running on')
     parser.add_argument('-s', '--suite', default='all',
                         help='testsuite to execute')
     parser.add_argument('-b', '--backend', default='cb',
@@ -62,7 +70,7 @@ def main():
     args = parser.parse_args()
     backend = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    run_testsuite(args.suite, backend)
+    run_testsuite(args.suite, backend, args.host, int(args.port))
 
 if __name__ == "__main__":
     main()
