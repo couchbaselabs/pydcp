@@ -6,27 +6,40 @@ import unittest
 
 from unit import *
 
-def run_upr_testsuite():
-    upr_suite = unittest.TestLoader().loadTestsFromTestCase(UprTestCase)
+def run_upr_testsuite(remote):
+    upr_suite = unittest.TestSuite()
+    upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, remote))
     unittest.TextTestRunner(verbosity=2).run(upr_suite)
 
-def run_mcd_testsuite():
-    mcd_suite = unittest.TestLoader().loadTestsFromTestCase(McdTestCase)
+def run_mcd_testsuite(remote):
+    mcd_suite = unittest.TestSuite()
+    mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, remote))
     unittest.TextTestRunner(verbosity=2).run(mcd_suite)
 
-def run_testsuite(suite):
+def run_testsuite(suite, remote):
     if suite == 'all':
-        run_upr_testsuite()
-        run_mcd_testsuite()
+        run_upr_testsuite(remote)
+        run_mcd_testsuite(remote)
     elif suite == 'upr':
-        run_upr_testsuite()
+        run_upr_testsuite(remote)
     elif suite == 'mcd':
-        run_mcd_testsuite()
+        run_mcd_testsuite(remote)
     else:
-        print "Bad Testsuite '%s'" % suite
+        print "Invalid testsuite type '%s'" % suite
+        sys.exit(0)
+
+def get_remote_server(remote):
+    if remote == 'cb':
+        return RemoteServer.CB
+    elif remote == 'dev':
+        return RemoteServer.DEV
+    elif remote == 'mcd':
+        return RemoteServer.MCD
+    else:
+        print "Invalid remote server type '%s'" % remote
+        sys.exit(0)
 
 def set_log_level(level):
-    print level
     if level == None:
         logging.basicConfig(level=logging.ERROR)
     elif level == 1:
@@ -40,13 +53,16 @@ def main():
     parser = argparse.ArgumentParser(description='Upr unit test framework')
 
     parser.add_argument('-s', '--suite', default='all',
-                    help='testsuite to execute')
+                        help='testsuite to execute')
+    parser.add_argument('-r', '--remote', default='cb',
+                        help='remote server to run against')
     parser.add_argument('-v', '--verbosity', action='count',
                         help='verbosity level')
 
     args = parser.parse_args()
+    remote = get_remote_server(args.remote)
     set_log_level(args.verbosity)
-    run_testsuite(args.suite)
+    run_testsuite(args.suite, remote)
 
 if __name__ == "__main__":
     main()

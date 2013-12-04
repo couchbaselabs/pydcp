@@ -9,7 +9,30 @@ from mcdclient import McdClient
 HOST = '127.0.0.1'
 PORT = 12000
 
-class UprTestCase(unittest.TestCase):
+class RemoteServer:
+    CB, DEV, MCD = range(3)
+
+class ParametrizedTestCase(unittest.TestCase):
+    """ TestCase classes that want to be parametrized should
+        inherit from this class.
+    """
+    def __init__(self, methodName, remote):
+        super(ParametrizedTestCase, self).__init__(methodName)
+        self.remote = remote
+
+    @staticmethod
+    def parametrize(testcase_klass, remote):
+        """ Create a suite containing all tests taken from the given
+            subclass, passing them the parameter 'param'.
+        """
+        testloader = unittest.TestLoader()
+        testnames = testloader.getTestCaseNames(testcase_klass)
+        suite = unittest.TestSuite()
+        for name in testnames:
+            suite.addTest(testcase_klass(name, remote))
+        return suite
+
+class UprTestCase(ParametrizedTestCase):
     def setUp(self):
         self.upr_client = UprClient(HOST, PORT)
         self.mcd_client = McdClient(HOST, PORT)
@@ -125,7 +148,7 @@ class UprTestCase(unittest.TestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
-class McdTestCase(unittest.TestCase):
+class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.client = McdClient(HOST, PORT)
 

@@ -19,3 +19,11 @@ Test suites can be specified with the 'suite' option
  -s all  - Run all tests
  -s upr  - Run all upr related tests
  -s mcd  - Run all memcached related tests
+
+Some unit tests can only be run against certain server types. To specify your
+server type use the flag below
+
+(None)   - Couchbase Server
+ -r cb   - Couchbase Server
+ -r dev  - Couchbase Dev Server (cluster_run)
+ -r mcd  - Memcached with ep-engine
