@@ -24,6 +24,6 @@ Some unit tests can only be run against certain server types. To specify your
 server type use the flag below
 
 (None)   - Couchbase Server
- -r cb   - Couchbase Server
- -r dev  - Couchbase Dev Server (cluster_run)
- -r mcd  - Memcached with ep-engine
+ -b cb   - Couchbase Server
+ -b dev  - Couchbase Dev Server (cluster_run)
+ -b mcd  - Memcached with ep-engine

@@ -6,37 +6,37 @@ import unittest
 
 from unit import *
 
-def run_upr_testsuite(remote):
+def run_upr_testsuite(backend):
     upr_suite = unittest.TestSuite()
-    upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, remote))
+    upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, backend))
     unittest.TextTestRunner(verbosity=2).run(upr_suite)
 
-def run_mcd_testsuite(remote):
+def run_mcd_testsuite(backend):
     mcd_suite = unittest.TestSuite()
-    mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, remote))
+    mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, backend))
     unittest.TextTestRunner(verbosity=2).run(mcd_suite)
 
-def run_testsuite(suite, remote):
+def run_testsuite(suite, backend):
     if suite == 'all':
-        run_upr_testsuite(remote)
-        run_mcd_testsuite(remote)
+        run_upr_testsuite(backend)
+        run_mcd_testsuite(backend)
     elif suite == 'upr':
-        run_upr_testsuite(remote)
+        run_upr_testsuite(backend)
     elif suite == 'mcd':
-        run_mcd_testsuite(remote)
+        run_mcd_testsuite(backend)
     else:
         print "Invalid testsuite type '%s'" % suite
         sys.exit(0)
 
-def get_remote_server(remote):
-    if remote == 'cb':
+def get_remote_server(backend):
+    if backend == 'cb':
         return RemoteServer.CB
-    elif remote == 'dev':
+    elif backend == 'dev':
         return RemoteServer.DEV
-    elif remote == 'mcd':
+    elif backend == 'mcd':
         return RemoteServer.MCD
     else:
-        print "Invalid remote server type '%s'" % remote
+        print "Invalid backend server type '%s'" % backend
         sys.exit(0)
 
 def set_log_level(level):
@@ -54,15 +54,15 @@ def main():
 
     parser.add_argument('-s', '--suite', default='all',
                         help='testsuite to execute')
-    parser.add_argument('-r', '--remote', default='cb',
-                        help='remote server to run against')
+    parser.add_argument('-b', '--backend', default='cb',
+                        help='backend server to run against')
     parser.add_argument('-v', '--verbosity', action='count',
                         help='verbosity level')
 
     args = parser.parse_args()
-    remote = get_remote_server(args.remote)
+    backend = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    run_testsuite(args.suite, remote)
+    run_testsuite(args.suite, backend)
 
 if __name__ == "__main__":
     main()
