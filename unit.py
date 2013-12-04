@@ -1,5 +1,6 @@
 
 import logging
+import time
 import unittest
 
 from constants import *
@@ -167,10 +168,20 @@ class McdTestCase(ParametrizedTestCase):
         self.client = McdClient(self.host, self.port)
         if (self.backend == RemoteServer.MCD):
             resp = self.client.flush().next_response()
-            assert resp['status'] == SUCCESS, "Flush all is not enabled"
+            assert resp['status'] == SUCCESS, "Flush all is not enabled %s" % resp
 
     def tearDown(self):
         self.client.shutdown()
+
+    def wait_for_stat(self, stat, val, type=''):
+        for i in range(5):
+            op = self.client.stats(type)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+            if resp['value'][stat] == str(val):
+                return True
+            time.sleep(1)
+        return False
 
     def test_stats(self):
         op = self.client.stats()
@@ -193,3 +204,15 @@ class McdTestCase(ParametrizedTestCase):
         resp = op.next_response()
         assert resp['status'] == SUCCESS
         assert resp['value']['curr_items'] == '1'
+
+    @skipUnlessMcd
+    def test_delete(self):
+        op = self.client.set('key1', 'value', 0, 0, 0)
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
+        op = self.client.delete('key1', 0)
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
+        assert self.wait_for_stat('curr_items', 0)

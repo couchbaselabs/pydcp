@@ -20,6 +20,11 @@ class McdClient():
         self.conn.queue_operation(op)
         return op
 
+    def delete(self, key, vbucket):
+        op = Delete(key, vbucket)
+        self.conn.queue_operation(op)
+        return op
+
     def flush(self):
         op = Flush()
         self.conn.queue_operation(op)

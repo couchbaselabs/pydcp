@@ -207,6 +207,23 @@ class Set(Operation):
     def _get_extras(self):
         return struct.pack(">II", self.flags, self.exp)
 
+class Delete(Operation):
+    def __init__(self, key, vbucket):
+        Operation.__init__(self, CMD_DELETE, 0, vbucket, 0, key, '')
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        assert extlen == 0
+        assert keylen == 0
+
+        self.end = True
+        self.responses.put({ 'opcode': opcode,
+                             'status': status,
+                             'cas'   : cas })
+        return True
+
+    def _get_extras(self):
+        return ''
+
 class Flush(Operation):
     def __init__(self):
         Operation.__init__(self, CMD_FLUSH, 0, 0, 0, '', '')
