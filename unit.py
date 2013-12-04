@@ -143,10 +143,3 @@ class McdTestCase(unittest.TestCase):
         resp = op.next_response()
         assert resp['status'] == SUCCESS
         assert resp['value']['ep_tap_backoff_period'] == '5'
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    upr_suite = unittest.TestLoader().loadTestsFromTestCase(UprTestCase)
-    mcd_suite = unittest.TestLoader().loadTestsFromTestCase(McdTestCase)
-    unittest.TextTestRunner(verbosity=2).run(upr_suite)
-    unittest.TextTestRunner(verbosity=2).run(mcd_suite)
