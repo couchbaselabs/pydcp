@@ -48,7 +48,7 @@ class UprTestCase(ParametrizedTestCase):
         self.upr_client = UprClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
         if (self.backend == RemoteServer.MCD):
-            resp = self.client.flush().next_response()
+            resp = self.mcd_client.flush().next_response()
             assert resp['status'] == SUCCESS, "Flush all is not enabled"
 
     def tearDown(self):
