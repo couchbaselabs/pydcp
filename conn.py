@@ -11,6 +11,7 @@ from op import *
 class Connection(threading.Thread):
     def __init__(self, host='127.0.0.1', port=11211):
         threading.Thread.__init__(self)
+        self.daemon = True
         self.host = host
         self.port = port
         self.socket = None
