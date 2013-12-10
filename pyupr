@@ -98,7 +98,6 @@ def main():
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    print args.xml
     run_testsuite(args.suite, backend, args.host, port, args.xml)
 
 if __name__ == "__main__":
