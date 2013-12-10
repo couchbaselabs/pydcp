@@ -66,14 +66,14 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        op = self.mcd_client.stats('tap')
+        op = self.mcd_client.stats('upr')
         response = op.next_response()
-        assert response['value']['mystream:type'] == 'consumer'
+        assert response['value']['eq_uprq:mystream:type'] == 'consumer'
 
         self.upr_client.shutdown()
-        op = self.mcd_client.stats('tap')
+        op = self.mcd_client.stats('upr')
         response = op.next_response()
-        assert 'mystream:type' not in response['value']
+        assert 'eq_uprq:mystream:type' not in response['value']
 
     """Basic upr open producer connection test
 
@@ -85,14 +85,14 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        op = self.mcd_client.stats('tap')
+        op = self.mcd_client.stats('upr')
         response = op.next_response()
-        assert response['value']['mystream:type'] == 'producer'
+        assert response['value']['eq_uprq:mystream:type'] == 'producer'
 
         self.upr_client.shutdown()
-        op = self.mcd_client.stats('tap')
+        op = self.mcd_client.stats('upr')
         response = op.next_response()
-        assert 'mystream:type' not in response['value']
+        assert 'eq_uprq:mystream:type' not in response['value']
 
     """Basic add stream test
 
