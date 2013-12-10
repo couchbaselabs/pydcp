@@ -1,7 +1,7 @@
 
 import logging
 import time
-import unittest
+import unittest2 as unittest
 
 from constants import *
 from uprclient import UprClient
