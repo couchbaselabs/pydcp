@@ -1,7 +1,11 @@
 
 import logging
 import time
-import unittest
+
+try:
+    import unittest2 as unittest
+except ImportError:
+    import unittest
 
 from constants import *
 from uprclient import UprClient
