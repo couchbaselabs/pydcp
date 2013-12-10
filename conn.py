@@ -23,6 +23,7 @@ class Connection(threading.Thread):
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.host, self.port))
+            self.running = True
             self.start()
         except Exception, e:
             self.socket = None
@@ -51,8 +52,6 @@ class Connection(threading.Thread):
         self.socket.send(op.bytes())
 
     def run(self):
-        self.running = True
-
         bytes_read = ''
         rd_timeout = 1
         desc = [self.socket]
