@@ -15,7 +15,7 @@ def run_as_unittest_suite(suite):
 
 def run_as_xml_suite(suite):
     import xmlrunner
-    xmlrunner.XMLTestRunner(verbosity=2).run(suite)
+    xmlrunner.XMLTestRunner(verbosity=2, output="results").run(suite)
 
 def run_upr_testsuite(backend, host, port, xml):
     upr_suite = unittest.TestSuite()
