@@ -10,34 +10,51 @@ except ImportError:
 
 from unit import *
 
-def run_upr_testsuite(backend, host, port):
+def run_as_unittest_suite(suite):
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+def run_as_xml_suite(suite):
+    import xmlrunner
+    xmlrunner.XMLTestRunner(verbosity=2).run(suite)
+
+def run_upr_testsuite(backend, host, port, xml):
     upr_suite = unittest.TestSuite()
     upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, backend,
                                                        host, port))
-    unittest.TextTestRunner(verbosity=2).run(upr_suite)
+    if xml:
+        run_as_xml_suite(upr_suite)
+    else:
+        run_as_unittest_suite(upr_suite)
 
-def run_mcd_testsuite(backend, host, port):
+
+def run_mcd_testsuite(backend, host, port, xml):
     mcd_suite = unittest.TestSuite()
     mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, backend,
                                                        host, port))
-    unittest.TextTestRunner(verbosity=2).run(mcd_suite)
+    if xml:
+        run_as_xml_suite(mcd_suite)
+    else:
+        run_as_unittest_suite(mcd_suite)
 
-def run_exp_testsuite(backend, host, port):
+def run_exp_testsuite(backend, host, port, xml):
     exp_suite = unittest.TestSuite()
     exp_suite.addTest(ParametrizedTestCase.parametrize(ExpTestCase, backend,
                                                        host, port))
-    unittest.TextTestRunner(verbosity=2).run(exp_suite)
+    if xml:
+        run_as_xml_suite(exp_suite)
+    else:
+        run_as_unittest_suite(exp_suite)
 
-def run_testsuite(suite, backend, host, port):
+def run_testsuite(suite, backend, host, port, xml):
     if suite == 'all':
-        run_upr_testsuite(backend, host, port)
-        run_mcd_testsuite(backend, host, port)
+        run_upr_testsuite(backend, host, port, xml)
+        run_mcd_testsuite(backend, host, port, xml)
     elif suite == 'upr':
-        run_upr_testsuite(backend, host, port)
+        run_upr_testsuite(backend, host, port, xml)
     elif suite == 'mcd':
-        run_mcd_testsuite(backend, host, port)
+        run_mcd_testsuite(backend, host, port, xml)
     elif suite == 'exp':
-        run_exp_testsuite(backend, host, port)
+        run_exp_testsuite(backend, host, port, xml)
     else:
         print "Invalid testsuite type '%s'" % suite
         sys.exit(0)
@@ -76,11 +93,13 @@ def main():
                         help='backend server to run against')
     parser.add_argument('-v', '--verbosity', action='count',
                         help='verbosity level')
+    parser.add_argument('-x', '--xml', action='store_true', default=False)
 
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    run_testsuite(args.suite, backend, args.host, port)
+    print args.xml
+    run_testsuite(args.suite, backend, args.host, port, args.xml)
 
 if __name__ == "__main__":
     main()

@@ -30,4 +30,6 @@ server type use the 'backend' flag below:
 
 The default host and port is 127.0.0.1:11211, but you can change these values by using the 'host' and 'port' flags:
 
+To run the suite with xmlrunner specify the '-x' or '--xml' option
+
 -h 10.5.2.100 -p 12000
