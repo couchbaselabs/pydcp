@@ -1,7 +1,7 @@
 
 import logging
 import time
-import unittest
+import unittest2 as unittest
 
 from constants import *
 from uprclient import UprClient
@@ -137,6 +137,31 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.add_stream(0, 0)
         response = op.next_response()
         assert response['status'] == ERR_KEY_EEXISTS
+
+    """Add stream to new consumer
+
+    Creates two clients each with consumers using the same key.
+    Attempts to add stream to first consumer and second consumer.
+    Expects that adding stream to second consumer passes"""
+    def test_add_stream_to_duplicate_consumer(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        upr_client2 = UprClient(self.host, self.port)
+        op = upr_client2.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_ECLIENT
+
+        op = upr_client2.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
 
     def test_close_stream_command(self):
         op = self.upr_client.close_stream(0)

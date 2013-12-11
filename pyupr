@@ -2,7 +2,8 @@
 
 import argparse
 import logging
-import unittest
+import unittest2 as unittest
+import xmlrunner
 
 from unit import *
 
@@ -10,19 +11,20 @@ def run_upr_testsuite(backend, host, port):
     upr_suite = unittest.TestSuite()
     upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, backend,
                                                        host, port))
-    unittest.TextTestRunner(verbosity=2).run(upr_suite)
+    xmlrunner.XMLTestRunner(verbosity=2, output="results").run(upr_suite)
+
 
 def run_mcd_testsuite(backend, host, port):
     mcd_suite = unittest.TestSuite()
     mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, backend,
                                                        host, port))
-    unittest.TextTestRunner(verbosity=2).run(mcd_suite)
+    xmlrunner.XMLTestRunner(verbosity=2, output="results").run(mcd_suite)
 
 def run_exp_testsuite():
     exp_suite = unittest.TestSuite()
     #exp_suite.addTest(UprTestCase('test_stream_request_with_deletes'))
     exp_suite.addTest(McdTestCase('test_delete'))
-    unittest.TextTestRunner(verbosity=2).run(exp_suite)
+    xmlrunner.XMLTestRunner(verbosity=2, output="results").run(exp_suite)
 
 def run_testsuite(suite, backend, host, port):
     if suite == 'all':
