@@ -69,7 +69,6 @@ class Connection(threading.Thread):
             while len(bytes_read) >= HEADER_LEN:
                 magic, opcode, keylen, extlen, dt, status, bodylen, opaque, cas=\
                     struct.unpack(PKT_HEADER_FMT, bytes_read[0:HEADER_LEN])
-                unaligned_opaque = struct.unpack("=I", bytes_read[12:16])[0]
 
                 if len(bytes_read) < (HEADER_LEN+bodylen):
                     break
@@ -89,7 +88,7 @@ class Connection(threading.Thread):
                             self.ops.remove(op)
                         break
                     else:
-                        self._handle_random_opaque(opcode, status, unaligned_opaque)
+                        self._handle_random_opaque(opcode, status, opaque)
 
     def _handle_random_opaque(self, opcode, vbucket, opaque):
         if opcode == CMD_STREAM_REQ:
