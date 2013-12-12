@@ -177,17 +177,23 @@ class UprTestCase(ParametrizedTestCase):
         op = self.mcd_client.stats('vbucket-seqno')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        end_seqno = int(resp['value']['vb_0'])
+        end_seqno = int(resp['value']['vb_0_high_seqno'])
 
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
         assert response['status'] == SUCCESS
 
+        mutations = 0
+        last_by_seqno = 0
         op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
         while op.has_response():
             response = op.next_response()
             assert response['status'] == SUCCESS
-            print response
+            if response['opcode'] == 87:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+        assert mutations == 10
 
     @skipUnlessMcd
     def test_stream_request_with_deletes(self):
@@ -196,20 +202,36 @@ class UprTestCase(ParametrizedTestCase):
             resp = op.next_response()
             assert resp['status'] == SUCCESS
 
+        for i in range(5):
+            op = self.mcd_client.delete('key' + str(i), 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
         op = self.mcd_client.stats('vbucket-seqno')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        end_seqno = int(resp['value']['vb_0'])
+        end_seqno = int(resp['value']['vb_0_high_seqno'])
 
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
         assert response['status'] == SUCCESS
 
+        mutations = 0
+        deletions = 0
+        last_by_seqno = 0
         op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
         while op.has_response():
             response = op.next_response()
             assert response['status'] == SUCCESS
-            print response
+            if response['opcode'] == 87 or response['opcode'] == 88:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+            if response['opcode'] == 87:
+                mutations = mutations + 1
+            if response['opcode'] == 88:
+                deletions = deletions + 1
+        assert mutations == 5
+        assert deletions == 5
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
