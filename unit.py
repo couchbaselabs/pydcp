@@ -167,6 +167,11 @@ class UprTestCase(ParametrizedTestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
+    """Basic upr stream request (Receives mutations)
+
+    Stores 10 items into vbucket 0 and then creates an upr stream to
+    retrieve those items in order of sequence number.
+    """
     @skipUnlessMcd
     def test_stream_request_with_ops(self):
         for i in range(10):
@@ -195,6 +200,12 @@ class UprTestCase(ParametrizedTestCase):
                 mutations = mutations + 1
         assert mutations == 10
 
+    """Basic upr stream request (Receives mutations/deletions)
+
+    Stores 10 items into vbucket 0 and then deletes 5 of thos items. After
+    the items have been inserted/deleted from the server we create an upr
+    stream to retrieve those items in order of sequence number.
+    """
     @skipUnlessMcd
     def test_stream_request_with_deletes(self):
         for i in range(10):
