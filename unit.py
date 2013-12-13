@@ -112,6 +112,21 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
+    """Add stream to producer
+
+    Attempt to add stream to a producer connection. Expects to recieve
+    client error response."""
+    def test_add_stream_to_producer(self):
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_ECLIENT
+
+
     """Add stream test without open connection
 
     This test attempts to add a stream without idnetifying the
@@ -140,7 +155,6 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.open_consumer("mystream")
         response = op.next_response()
         assert response['status'] == SUCCESS
-
 
     """Add stream command with no consumer vbucket
 
