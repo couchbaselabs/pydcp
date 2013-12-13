@@ -11,8 +11,7 @@ from constants import *
 from uprclient import UprClient
 from mcdclient import McdClient
 
-HOST = '127.0.0.1'
-PORT = 12000
+MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
 
 def skipUnlessMcd(func):
     def _decorator(self, *args, **kwargs):
@@ -193,6 +192,37 @@ class UprTestCase(ParametrizedTestCase):
         while op.has_response():
             response = op.next_response()
             assert response['status'] == SUCCESS
+
+    """Stream requests from the same vbucket
+
+    Opens a stream request for a vbucket to read up to seq 100. Then sends another
+    stream request for the same vbucket.  Expect a EXISTS error and upr stats
+    should refer to initial created stream."""
+    def test_stream_from_same_vbucket(self):
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert response['value']['eq_uprq:mystream:type'] == 'producer'
+        created = response['value']['eq_uprq:mystream:created']
+        assert created >= 0
+
+        op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_KEY_EEXISTS
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert response['value']['eq_uprq:mystream:created'] == created
+
+
 
     """Basic upr stream request (Receives mutations)
 
