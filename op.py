@@ -49,13 +49,7 @@ class Operation():
         raise NotImplementedError("Subclass must implement abstract method")
 
     def __str__(self):
-        ret = ''
-        raw = binascii.hexlify(self.bytes())
-        for i in range(len(raw))[0::2]:
-            ret += raw[i] + raw[i+1] + ' '
-            if (i+2) % 8 == 0:
-                ret += '\n'
-        return ret
+        return packet_2_str(self.bytes())
 
 class OpenConnection(Operation):
     def __init__(self, flags, name):
@@ -291,6 +285,15 @@ class Flush(Operation):
 
     def _get_extras(self):
         return struct.pack(">I", 0)
+
+def packet_2_str(packet):
+    ret = ''
+    raw = binascii.hexlify(packet)
+    for i in range(len(raw))[0::2]:
+        ret += raw[i] + raw[i+1] + ' '
+        if (i+2) % 8 == 0:
+            ret += '\n'
+    return ret
 
 class StopPersistence(Operation):
     def __init__(self):

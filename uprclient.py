@@ -11,6 +11,9 @@ class UprClient():
         self.conn = Connection(host, port)
         self.conn.connect()
 
+    def set_proxy(self, client):
+        self.conn.proxy = client.conn.socket
+
     def open_consumer(self, name):
         op = OpenConnection(FLAG_OPEN_CONSUMER, name)
         self.conn.queue_operation(op)
