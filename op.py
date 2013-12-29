@@ -184,6 +184,10 @@ class StreamRequest(Operation):
                                  'by_seqno'   : by_seqno,
                                  'rev_seqno'  : rev_seqno,
                                  'key'        : key })
+        elif opcode == CMD_SNAPSHOT_MARKER:
+            logging.info("(Stream Request) Received snapshot marker")
+            self.responses.put({ 'opcode'     : opcode,
+                                 'status'     : status })
         else:
             logging.error("(Stream Request) Unknown response: %s" % opcode)
 
