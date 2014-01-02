@@ -142,6 +142,7 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == ERR_KEY_EEXISTS
 
+    @unittest.skip("Not implemented")
     def test_close_stream_command(self):
         op = self.upr_client.close_stream(0)
         response = op.next_response()
