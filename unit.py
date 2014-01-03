@@ -193,6 +193,25 @@ class UprTestCase(ParametrizedTestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
+
+    """Stream request with start seqno too high
+
+    Opens a producer connection and then tries to create a stream with a seqno
+    that is way too large. The stream should be closed with a range error."""
+    def test_stream_request_start_seqno_too_high(self):
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, MAX_SEQNO/2, MAX_SEQNO, 0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_ERANGE
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert 'eq_uprq:mystream:stream_0_opaque' not in response['value']
+        assert response['value']['eq_uprq:mystream:type'] == 'producer'
+
     """Stream requests from the same vbucket
 
     Opens a stream request for a vbucket to read up to seq 100. Then sends another
