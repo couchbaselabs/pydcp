@@ -191,7 +191,9 @@ class StreamRequest(Operation):
         else:
             logging.error("(Stream Request) Unknown response: %s" % opcode)
 
-        return False
+        if status == SUCCESS:
+            return False
+        return True
 
     def _get_extras(self):
         return struct.pack(">IIQQQQ", self.flags, 0, self.start_seqno,
