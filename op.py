@@ -162,10 +162,10 @@ class StreamRequest(Operation):
             return True
         elif opcode == CMD_MUTATION:
             logging.info("(Stream Request) Received mutation")
-            by_seqno, rev_seqno, flags, exp, lock_time = \
-                struct.unpack(">QQIII", body[0:28])
-            key = body[28:28+keylen]
-            value = body[28+keylen:]
+            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len = \
+                struct.unpack(">QQIIIH", body[0:30])
+            key = body[30:30+keylen]
+            value = body[30+keylen:]
             self.responses.put({ 'opcode'     : opcode,
                                  'status'     : status,
                                  'by_seqno'   : by_seqno,
@@ -177,8 +177,9 @@ class StreamRequest(Operation):
                                  'value'      : value })
         elif opcode == CMD_DELETION:
             logging.info("(Stream Request) Received deletion")
-            by_seqno, rev_seqno = struct.unpack(">QQ", body[0:16])
-            key = body[16:16+keylen]
+            by_seqno, rev_seqno, ext_meta_len = \
+                struct.unpack(">QQH", body[0:18])
+            key = body[18:18+keylen]
             self.responses.put({ 'opcode'     : opcode,
                                  'status'     : status,
                                  'by_seqno'   : by_seqno,
