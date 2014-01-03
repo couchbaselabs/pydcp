@@ -147,8 +147,24 @@ class StreamRequest(Operation):
             assert cas == 0
             assert keylen == 0
             assert extlen == 0
-            self.responses.put({ 'opcode' : opcode,
-                                 'status' : status })
+
+            result = { 'opcode' : opcode,
+                       'status' : status }
+
+            if status == SUCCESS:
+                assert (len(body) % 8) == 0
+                result['failover_log'] = []
+
+                pos = 0
+                bodylen = len(body)
+                while bodylen > pos:
+                    vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos+16])
+                    result['failover_log'].append((vb_uuid, seqno))
+                    pos += 16
+            else:
+                result['err_msg'] = body
+
+            self.responses.put(result)
         elif opcode == CMD_STREAM_END:
             logging.info("(Stream Request) Received stream end")
             assert cas == 0
