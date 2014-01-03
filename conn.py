@@ -77,18 +77,17 @@ class Connection(threading.Thread):
                 body = bytes_read[HEADER_LEN:HEADER_LEN+bodylen]
                 bytes_read = bytes_read[HEADER_LEN+bodylen:]
 
-                if not self.ops:
-                    self._handle_random_opaque(opcode, status, opaque)
-
+                found = False
                 for op in self.ops:
                     if op.opaque == opaque:
                         rm = op.add_response(opcode, keylen, extlen,
                                                  status, cas, body)
                         if rm:
                             self.ops.remove(op)
+                        found = True
                         break
-                    else:
-                        self._handle_random_opaque(opcode, status, opaque)
+                if not found:
+                    self._handle_random_opaque(opcode, status, opaque)
 
     def _handle_random_opaque(self, opcode, vbucket, opaque):
         if opcode == CMD_STREAM_REQ:
