@@ -230,6 +230,19 @@ class UprTestCase(ParametrizedTestCase):
         assert 'eq_uprq:mystream:stream_0_opaque' not in response['value']
         assert response['value']['eq_uprq:mystream:type'] == 'producer'
 
+    """Stream request for invalid connection
+
+    Try to create a stream over a non-upr connection. The server should
+    disconnect from the client"""
+    def test_stream_request_invalid_connection(self):
+        op = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_ECLIENT
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert 'eq_uprq:mystream:type' not in response['value']
+
     """Stream request with start seqno bigger than end seqno
 
     Opens a producer connection and then tries to create a stream with a start
