@@ -212,6 +212,24 @@ class UprTestCase(ParametrizedTestCase):
         assert 'eq_uprq:mystream:stream_0_opaque' not in response['value']
         assert response['value']['eq_uprq:mystream:type'] == 'producer'
 
+    """Stream request with invalid vbucket
+
+    Opens a producer connection and then tries to create a stream with an
+    invalid VBucket. Should get a not my vbucket error."""
+    def test_stream_request_start_seqno_too_high(self):
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(1025, 0, 0, MAX_SEQNO, 0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_NOT_MY_VBUCKET
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert 'eq_uprq:mystream:stream_0_opaque' not in response['value']
+        assert response['value']['eq_uprq:mystream:type'] == 'producer'
+
     """Stream request with start seqno bigger than end seqno
 
     Opens a producer connection and then tries to create a stream with a start
