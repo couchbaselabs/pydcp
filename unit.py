@@ -243,6 +243,23 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert 'eq_uprq:mystream:type' not in response['value']
 
+    """Stream request for consumer connection
+
+    Try to create a stream on a consumer connection. The server should
+    disconnect from the client"""
+    def test_stream_request_consumer_connection(self):
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_ECLIENT
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert 'eq_uprq:mystream:type' not in response['value']
+
     """Stream request with start seqno bigger than end seqno
 
     Opens a producer connection and then tries to create a stream with a start
