@@ -86,6 +86,14 @@ class ParametrizedTestCase(unittest.TestCase):
             suite.addTest(testcase_klass(name, backend, host, port))
         return suite
 
+class ExpTestCase(ParametrizedTestCase):
+    def setUp(self):
+        self.initialize_backend()
+
+    def tearDown(self):
+        self.destroy_backend() 
+
+
 class UprTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()

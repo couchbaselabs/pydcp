@@ -22,10 +22,10 @@ def run_mcd_testsuite(backend, host, port):
                                                        host, port))
     unittest.TextTestRunner(verbosity=2).run(mcd_suite)
 
-def run_exp_testsuite():
+def run_exp_testsuite(backend, host, port):
     exp_suite = unittest.TestSuite()
-    #exp_suite.addTest(UprTestCase('test_stream_request_with_deletes'))
-    exp_suite.addTest(McdTestCase('test_delete'))
+    exp_suite.addTest(ParametrizedTestCase.parametrize(ExpTestCase, backend,
+                                                       host, port))
     unittest.TextTestRunner(verbosity=2).run(exp_suite)
 
 def run_testsuite(suite, backend, host, port):
