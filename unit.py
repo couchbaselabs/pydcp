@@ -435,6 +435,50 @@ class UprTestCase(ParametrizedTestCase):
         assert mutations == 5
         assert deletions == 5
 
+    """Stream request that reads from disk and memory
+
+    Insert 15,000 items and then wait for some of the checkpoints to be removed
+    from memory. Then request all items starting from 0 so that we can do a disk
+    backfill and then read the items that are in memory"""
+    def test_stream_request_disk_and_memory_read(self):
+        for i in range(15000):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket-seqno')
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        end_seqno = int(resp['value']['vb_0_high_seqno'])
+
+        Stats.wait_for_persistence(self.mcd_client)
+        assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
+                                   'checkpoint')
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        mutations = 0
+        markers = 0
+        last_by_seqno = 0
+        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
+        while op.has_response():
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                state = Stats.get_stat(self.mcd_client,
+                                       'eq_uprq:mystream:stream_0_state', 'upr')
+                assert state == 'backfilling'
+            if response['opcode'] == 86:
+                markers = markers + 1
+            if response['opcode'] == 87:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+        assert mutations == 15000
+        assert markers > 1
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()

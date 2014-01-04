@@ -35,7 +35,7 @@ class Stats():
 
     @staticmethod
     def wait_for_stat(client, stat, val, type=''):
-        for i in range(5):
+        for i in range(60):
             op = client.stats(type)
             resp = op.next_response()
             assert resp['status'] == SUCCESS
