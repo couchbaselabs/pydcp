@@ -44,11 +44,11 @@ def run_testsuite(suite, backend, host, port):
 
 def get_remote_server(backend):
     if backend == 'cb':
-        return RemoteServer.CB
+        return RemoteServer.CB, 11210
     elif backend == 'dev':
-        return RemoteServer.DEV
+        return RemoteServer.DEV, 12000
     elif backend == 'mcd':
-        return RemoteServer.MCD
+        return RemoteServer.MCD, 5000
     else:
         print "Invalid backend server type '%s'" % backend
         sys.exit(0)
@@ -70,8 +70,6 @@ def main():
 
     parser.add_argument('-h', '--host', default='127.0.0.1',
                         help='the ip address of the server')
-    parser.add_argument('-p', '--port', default=11211,
-                        help='the port the server is running on')
     parser.add_argument('-s', '--suite', default='all',
                         help='testsuite to execute')
     parser.add_argument('-b', '--backend', default='cb',
@@ -80,9 +78,9 @@ def main():
                         help='verbosity level')
 
     args = parser.parse_args()
-    backend = get_remote_server(args.backend)
+    backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    run_testsuite(args.suite, backend, args.host, int(args.port))
+    run_testsuite(args.suite, backend, args.host, port)
 
 if __name__ == "__main__":
     main()

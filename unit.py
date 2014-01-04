@@ -10,18 +10,10 @@ except ImportError:
 from constants import *
 from uprclient import UprClient
 from mcdclient import McdClient
+from rest_client import RestClient
 from statshandler import Stats
 
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
-
-def skipUnlessMcd(func):
-    def _decorator(self, *args, **kwargs):
-        if self.backend == RemoteServer.MCD:
-            func(self, *args, **kwargs)
-        else:
-            logging.warning('Skpping: Requires memcached backend')
-            return unittest.skip('')
-    return _decorator
 
 class RemoteServer:
     CB, DEV, MCD = range(3)
@@ -35,6 +27,52 @@ class ParametrizedTestCase(unittest.TestCase):
         self.backend = backend
         self.host = host
         self.port = port
+
+    def initialize_backend(self):
+        print ''
+        logging.info("-------Setup Test Case-------")
+        self.rest_client = RestClient(self.host)
+        if (self.backend == RemoteServer.MCD):
+            self.memcached_backend_setup()
+        else:
+            self.couchbase_backend_setup()
+        logging.info("-----Begin Test Case-----")
+
+    def destroy_backend(self):
+        logging.info("-----Tear Down Test Case-----")
+        if (self.backend == RemoteServer.MCD):
+            self.memcached_backend_teardown()
+        else:
+            self.couchbase_backend_teardown()
+
+    def memcached_backend_setup(self):
+        self.upr_client = UprClient(self.host, self.port)
+        self.mcd_client = McdClient(self.host, self.port)
+        resp = self.mcd_client.flush().next_response()
+        assert resp['status'] == SUCCESS, "Flush all is not enabled"
+
+    def memcached_backend_teardown(self):
+        self.upr_client.shutdown()
+        self.mcd_client.shutdown()
+
+    def couchbase_backend_setup(self):
+        self.rest_client = RestClient(self.host)
+        for bucket in self.rest_client.get_all_buckets():
+            logging.info("Deleting bucket %s" % bucket)
+            assert self.rest_client.delete_bucket(bucket)
+        logging.info("Creating default bucket")
+        assert self.rest_client.create_default_bucket()
+        Stats.wait_for_warmup(self.host, self.port)
+        self.upr_client = UprClient(self.host, self.port)
+        self.mcd_client = McdClient(self.host, self.port)
+
+    def couchbase_backend_teardown(self):
+        self.upr_client.shutdown()
+        self.mcd_client.shutdown()
+        for bucket in self.rest_client.get_all_buckets():
+            logging.info("Deleting bucket %s" % bucket)
+            assert self.rest_client.delete_bucket(bucket)
+        self.rest_client = None
 
     @staticmethod
     def parametrize(testcase_klass, backend, host, port):
@@ -50,15 +88,10 @@ class ParametrizedTestCase(unittest.TestCase):
 
 class UprTestCase(ParametrizedTestCase):
     def setUp(self):
-        self.upr_client = UprClient(self.host, self.port)
-        self.mcd_client = McdClient(self.host, self.port)
-        if (self.backend == RemoteServer.MCD):
-            resp = self.mcd_client.flush().next_response()
-            assert resp['status'] == SUCCESS, "Flush all is not enabled"
+        self.initialize_backend()
 
     def tearDown(self):
-        self.upr_client.shutdown()
-        self.mcd_client.shutdown()
+        self.destroy_backend()
 
     """Basic upr open consumer connection test
 
@@ -316,7 +349,6 @@ class UprTestCase(ParametrizedTestCase):
     Stores 10 items into vbucket 0 and then creates an upr stream to
     retrieve those items in order of sequence number.
     """
-    @skipUnlessMcd
     def test_stream_request_with_ops(self):
         for i in range(10):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
@@ -350,7 +382,6 @@ class UprTestCase(ParametrizedTestCase):
     the items have been inserted/deleted from the server we create an upr
     stream to retrieve those items in order of sequence number.
     """
-    @skipUnlessMcd
     def test_stream_request_with_deletes(self):
         for i in range(10):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
@@ -390,13 +421,10 @@ class UprTestCase(ParametrizedTestCase):
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
-        self.client = McdClient(self.host, self.port)
-        if (self.backend == RemoteServer.MCD):
-            resp = self.client.flush().next_response()
-            assert resp['status'] == SUCCESS, "Flush all is not enabled %s" % resp
+        self.initialize_backend()
 
     def tearDown(self):
-        self.client.shutdown()
+        self.destroy_backend()
 
     def test_stats(self):
         op = self.client.stats()
@@ -410,7 +438,6 @@ class McdTestCase(ParametrizedTestCase):
         assert resp['status'] == SUCCESS
         assert resp['value']['ep_tap_backoff_period'] == '5'
 
-    @skipUnlessMcd
     def test_set(self):
         op = self.client.set('key', 'value', 0, 0, 0)
         resp = op.next_response()
@@ -420,7 +447,6 @@ class McdTestCase(ParametrizedTestCase):
         assert resp['status'] == SUCCESS
         assert resp['value']['curr_items'] == '1'
 
-    @skipUnlessMcd
     def test_delete(self):
         op = self.client.set('key1', 'value', 0, 0, 0)
         resp = op.next_response()
@@ -432,7 +458,6 @@ class McdTestCase(ParametrizedTestCase):
 
         assert Stats.wait_for_stat(self.client, 'curr_items', 0)
 
-    @skipUnlessMcd
     def test_start_stop_persistence(self):
         op = self.client.stats()
         resp = op.next_response()

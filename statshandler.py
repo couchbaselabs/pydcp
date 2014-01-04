@@ -43,3 +43,14 @@ class Stats():
                 return True
             time.sleep(1)
         return False
+
+    @staticmethod
+    def wait_for_warmup(host, port):
+        while True:
+            client = McdClient(host, port)
+            op = client.stats()
+            response = op.next_response()
+            if response['status'] == SUCCESS:
+                if response['value']['ep_degraded_mode'] == '0':
+                    break
+            time.sleep(1)
