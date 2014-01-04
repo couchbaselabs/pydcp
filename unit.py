@@ -479,6 +479,93 @@ class UprTestCase(ParametrizedTestCase):
         assert mutations == 15000
         assert markers > 1
 
+    """ Stream request with incremental mutations
+
+    Insert some ops and then create a stream that wants to get more mutations
+    then there are ops. The stream should pause after it gets the first set.
+    Then add some more ops and wait from them to be streamed out. We will insert
+    the exact amount of items that the should be streamed out."""
+    def test_stream_request_incremental(self):
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        mutations = 0
+        markers = 0
+        last_by_seqno = 0
+        streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0, 0)
+        while streap_op.has_response() and mutations < 10:
+            response = streap_op.next_response()
+            assert response['status'] == SUCCESS
+            if response['opcode'] == 87:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i + 10), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        while streap_op.has_response():
+            response = streap_op.next_response()
+            assert response['status'] == SUCCESS
+            if response['opcode'] == 87:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+
+        assert mutations == 20
+
+    """ Stream request with incremental mutations (extra ops)
+
+    Insert some ops and then create a stream that wants to get more mutations
+    then there are ops. The stream should pause after it gets the first set.
+    Then add some more ops and wait from them to be streamed out. Make sure
+    that we don't get more ops then we asked for since more ops were added, but
+    they were past the end sequence number."""
+    def test_stream_request_incremental(self):
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        mutations = 0
+        markers = 0
+        last_by_seqno = 0
+        streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0, 0)
+        while streap_op.has_response() and mutations < 10:
+            response = streap_op.next_response()
+            assert response['status'] == SUCCESS
+            if response['opcode'] == 87:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i + 20), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        while streap_op.has_response():
+            response = streap_op.next_response()
+            assert response['status'] == SUCCESS
+            if response['opcode'] == 87:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+
+        assert mutations == 20
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
