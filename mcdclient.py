@@ -30,5 +30,15 @@ class McdClient():
         self.conn.queue_operation(op)
         return op
 
+    def start_persistence(self):
+        op = StartPersistence()
+        self.conn.queue_operation(op)
+        return op
+
+    def stop_persistence(self):
+        op = StopPersistence()
+        self.conn.queue_operation(op)
+        return op
+
     def shutdown(self):
         self.conn.close()

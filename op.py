@@ -291,3 +291,35 @@ class Flush(Operation):
 
     def _get_extras(self):
         return struct.pack(">I", 0)
+
+class StopPersistence(Operation):
+    def __init__(self):
+        Operation.__init__(self, CMD_STOP_PERSISTENCE, 0, 0, 0, '', '')
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        assert extlen == 0
+        assert keylen == 0
+
+        self.end = True
+        self.responses.put({ 'opcode': opcode,
+                             'status': status })
+        return True
+
+    def _get_extras(self):
+        return ''
+
+class StartPersistence(Operation):
+    def __init__(self):
+        Operation.__init__(self, CMD_START_PERSISTENCE, 0, 0, 0, '', '')
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        assert extlen == 0
+        assert keylen == 0
+
+        self.end = True
+        self.responses.put({ 'opcode': opcode,
+                             'status': status })
+        return True
+
+    def _get_extras(self):
+        return ''

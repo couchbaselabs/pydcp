@@ -10,6 +10,7 @@ except ImportError:
 from constants import *
 from uprclient import UprClient
 from mcdclient import McdClient
+from statshandler import Stats
 
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
 
@@ -397,16 +398,6 @@ class McdTestCase(ParametrizedTestCase):
     def tearDown(self):
         self.client.shutdown()
 
-    def wait_for_stat(self, stat, val, type=''):
-        for i in range(5):
-            op = self.client.stats(type)
-            resp = op.next_response()
-            assert resp['status'] == SUCCESS
-            if resp['value'][stat] == str(val):
-                return True
-            time.sleep(1)
-        return False
-
     def test_stats(self):
         op = self.client.stats()
         resp = op.next_response()
@@ -439,4 +430,31 @@ class McdTestCase(ParametrizedTestCase):
         resp = op.next_response()
         assert resp['status'] == SUCCESS
 
-        assert self.wait_for_stat('curr_items', 0)
+        assert Stats.wait_for_stat(self.client, 'curr_items', 0)
+
+    @skipUnlessMcd
+    def test_start_stop_persistence(self):
+        op = self.client.stats()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        if resp['value']['ep_flusher_state'] != 'paused':
+            op = self.client.stop_persistence()
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.client.set('key', 'value', 0, 0, 0)
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
+        time.sleep(2)
+
+        op = self.client.stats()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        assert resp['value']['ep_flusher_state'] == 'paused'
+
+        op = self.client.start_persistence()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
+        Stats.wait_for_persistence(self.client)
