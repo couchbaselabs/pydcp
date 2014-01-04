@@ -487,55 +487,55 @@ class McdTestCase(ParametrizedTestCase):
         self.destroy_backend()
 
     def test_stats(self):
-        op = self.client.stats()
+        op = self.mcd_client.stats()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
         assert resp['value']['curr_items'] == '0'
 
     def test_stats_tap(self):
-        op = self.client.stats('tap')
+        op = self.mcd_client.stats('tap')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
         assert resp['value']['ep_tap_backoff_period'] == '5'
 
     def test_set(self):
-        op = self.client.set('key', 'value', 0, 0, 0)
+        op = self.mcd_client.set('key', 'value', 0, 0, 0)
         resp = op.next_response()
 
-        op = self.client.stats()
+        op = self.mcd_client.stats()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
         assert resp['value']['curr_items'] == '1'
 
     def test_delete(self):
-        op = self.client.set('key1', 'value', 0, 0, 0)
+        op = self.mcd_client.set('key1', 'value', 0, 0, 0)
         resp = op.next_response()
         assert resp['status'] == SUCCESS
 
-        op = self.client.delete('key1', 0)
+        op = self.mcd_client.delete('key1', 0)
         resp = op.next_response()
         assert resp['status'] == SUCCESS
 
-        assert Stats.wait_for_stat(self.client, 'curr_items', 0)
+        assert Stats.wait_for_stat(self.mcd_client, 'curr_items', 0)
 
     def test_start_stop_persistence(self):
-        op = self.client.stop_persistence()
+        op = self.mcd_client.stop_persistence()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
 
-        op = self.client.set('key', 'value', 0, 0, 0)
+        op = self.mcd_client.set('key', 'value', 0, 0, 0)
         resp = op.next_response()
         assert resp['status'] == SUCCESS
 
         time.sleep(2)
 
-        op = self.client.stats()
+        op = self.mcd_client.stats()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
         assert resp['value']['ep_flusher_state'] == 'paused'
 
-        op = self.client.start_persistence()
+        op = self.mcd_client.start_persistence()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
 
-        Stats.wait_for_persistence(self.client)
+        Stats.wait_for_persistence(self.mcd_client)
