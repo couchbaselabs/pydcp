@@ -350,6 +350,10 @@ class UprTestCase(ParametrizedTestCase):
     retrieve those items in order of sequence number.
     """
     def test_stream_request_with_ops(self):
+        op = self.mcd_client.stop_persistence()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
         for i in range(10):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
             resp = op.next_response()
@@ -383,6 +387,10 @@ class UprTestCase(ParametrizedTestCase):
     stream to retrieve those items in order of sequence number.
     """
     def test_stream_request_with_deletes(self):
+        op = self.mcd_client.stop_persistence()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
         for i in range(10):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
             resp = op.next_response()
@@ -459,13 +467,9 @@ class McdTestCase(ParametrizedTestCase):
         assert Stats.wait_for_stat(self.client, 'curr_items', 0)
 
     def test_start_stop_persistence(self):
-        op = self.client.stats()
+        op = self.client.stop_persistence()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        if resp['value']['ep_flusher_state'] != 'paused':
-            op = self.client.stop_persistence()
-            resp = op.next_response()
-            assert resp['status'] == SUCCESS
 
         op = self.client.set('key', 'value', 0, 0, 0)
         resp = op.next_response()
