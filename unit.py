@@ -93,7 +93,6 @@ class ExpTestCase(ParametrizedTestCase):
     def tearDown(self):
         self.destroy_backend() 
 
-
 class UprTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
@@ -233,7 +232,8 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.stream_req(0, 0, 0, 0, 0, 0)
         while op.has_response():
             response = op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
 
 
     """Stream request with start seqno too high
@@ -381,7 +381,8 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
         while op.has_response():
             response = op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
             if response['opcode'] == 87:
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
@@ -424,7 +425,8 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
         while op.has_response():
             response = op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
             if response['opcode'] == 87 or response['opcode'] == 88:
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
@@ -465,7 +467,8 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
         while op.has_response():
             response = op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
             if response['opcode'] == 83:
                 state = Stats.get_stat(self.mcd_client,
                                        'eq_uprq:mystream:stream_0_state', 'upr')
@@ -501,7 +504,8 @@ class UprTestCase(ParametrizedTestCase):
         streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0, 0)
         while streap_op.has_response() and mutations < 10:
             response = streap_op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
             if response['opcode'] == 87:
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
@@ -514,7 +518,8 @@ class UprTestCase(ParametrizedTestCase):
 
         while streap_op.has_response():
             response = streap_op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
             if response['opcode'] == 87:
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
@@ -529,7 +534,7 @@ class UprTestCase(ParametrizedTestCase):
     Then add some more ops and wait from them to be streamed out. Make sure
     that we don't get more ops then we asked for since more ops were added, but
     they were past the end sequence number."""
-    def test_stream_request_incremental(self):
+    def test_stream_request_incremental_extra_ops(self):
         for i in range(10):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
             resp = op.next_response()
@@ -545,7 +550,8 @@ class UprTestCase(ParametrizedTestCase):
         streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0, 0)
         while streap_op.has_response() and mutations < 10:
             response = streap_op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
             if response['opcode'] == 87:
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
@@ -558,13 +564,58 @@ class UprTestCase(ParametrizedTestCase):
 
         while streap_op.has_response():
             response = streap_op.next_response()
-            assert response['status'] == SUCCESS
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
             if response['opcode'] == 87:
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
                 mutations = mutations + 1
 
         assert mutations == 20
+
+    """Send stream requests for multiple
+
+    Put some operations into four different vbucket. Then get the end sequence
+    number for each vbucket and create a stream to it. Read all of the mutations
+    from the streams and make sure they are all sent."""
+    def test_stream_request_multiple_vbuckets(self):
+        num_vbs = 4
+        num_ops = 10
+        for vb in range(num_vbs):
+            for i in range(num_ops):
+                op = self.mcd_client.set('key' + str(i), 'value', vb, 0, 0)
+                resp = op.next_response()
+                assert resp['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket-seqno')
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        streams = {}
+        for vb in range(4):
+            en = int(resp['value']['vb_%d_high_seqno' % vb])
+            op = self.upr_client.stream_req(vb, 0, 0, en, 0, 0)
+            streams[vb] = {'op' : op,
+                           'mutations' : 0,
+                           'last_seqno' : 0 }
+
+        while len(streams) > 0:
+            for vb in streams.keys():
+                if streams[vb]['op'].has_response():
+                    response = streams[vb]['op'].next_response()
+                    if response['opcode'] == 83:
+                        assert response['status'] == SUCCESS
+                    if response['opcode'] == 87:
+                        assert response['by_seqno'] > streams[vb]['last_seqno']
+                        streams[vb]['last_seqno'] = response['by_seqno']
+                        streams[vb]['mutations'] = streams[vb]['mutations'] + 1
+                else:
+                    assert streams[vb]['mutations'] == num_ops
+                    del streams[vb]
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):

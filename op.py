@@ -165,6 +165,8 @@ class StreamRequest(Operation):
                 result['err_msg'] = body
 
             self.responses.put(result)
+            if status != SUCCESS:
+                return True
         elif opcode == CMD_STREAM_END:
             logging.info("(Stream Request) Received stream end")
             assert cas == 0
@@ -172,7 +174,7 @@ class StreamRequest(Operation):
             assert extlen == 4
             flags = struct.unpack(">I", body[0:4])[0]
             self.responses.put({ 'opcode' : opcode,
-                                 'status' : status,
+                                 'vbucket' : status,
                                  'flags'  : flags })
             self.ended = True
             return True
@@ -183,7 +185,7 @@ class StreamRequest(Operation):
             key = body[30:30+keylen]
             value = body[30+keylen:]
             self.responses.put({ 'opcode'     : opcode,
-                                 'status'     : status,
+                                 'vbucket'     : status,
                                  'by_seqno'   : by_seqno,
                                  'rev_seqno'  : rev_seqno,
                                  'flags'      : flags,
@@ -197,20 +199,18 @@ class StreamRequest(Operation):
                 struct.unpack(">QQH", body[0:18])
             key = body[18:18+keylen]
             self.responses.put({ 'opcode'     : opcode,
-                                 'status'     : status,
+                                 'vbucket'     : status,
                                  'by_seqno'   : by_seqno,
                                  'rev_seqno'  : rev_seqno,
                                  'key'        : key })
         elif opcode == CMD_SNAPSHOT_MARKER:
             logging.info("(Stream Request) Received snapshot marker")
             self.responses.put({ 'opcode'     : opcode,
-                                 'status'     : status })
+                                 'vbucket'     : status })
         else:
             logging.error("(Stream Request) Unknown response: %s" % opcode)
 
-        if status == SUCCESS:
-            return False
-        return True
+        return False
 
     def _get_extras(self):
         return struct.pack(">IIQQQQ", self.flags, 0, self.start_seqno,
