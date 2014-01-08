@@ -61,7 +61,6 @@ class ParametrizedTestCase(unittest.TestCase):
         self.mcd_client.shutdown()
 
     def couchbase_backend_setup(self):
-        import pdb; pdb.set_trace()
         self.rest_client = RestClient(self.host, port=self.rest_port)
         for bucket in self.rest_client.get_all_buckets():
             logging.info("Deleting bucket %s" % bucket)
