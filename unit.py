@@ -28,10 +28,15 @@ class ParametrizedTestCase(unittest.TestCase):
         self.host = host
         self.port = port
 
+        if host.find(':') != -1:
+           self.host, self.rest_port = host.split(':')
+        else:
+           self.rest_port = 9000
+
     def initialize_backend(self):
         print ''
         logging.info("-------Setup Test Case-------")
-        self.rest_client = RestClient(self.host)
+        self.rest_client = RestClient(self.host, port=self.rest_port)
         if (self.backend == RemoteServer.MCD):
             self.memcached_backend_setup()
         else:
@@ -56,7 +61,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.mcd_client.shutdown()
 
     def couchbase_backend_setup(self):
-        self.rest_client = RestClient(self.host)
+        self.rest_client = RestClient(self.host, port=self.rest_port)
         for bucket in self.rest_client.get_all_buckets():
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
@@ -174,7 +179,6 @@ class UprTestCase(ParametrizedTestCase):
     client as a consumer or producer.  Excepts request
     to throw client error"""
     def test_add_stream_without_connection(self):
-
         op = self.upr_client.add_stream(0, 0)
         response = op.next_response()
         assert response['status'] == ERR_ECLIENT

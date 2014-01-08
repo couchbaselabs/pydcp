@@ -85,8 +85,8 @@ def main():
                                      usage='%(prog)s [options]',
                                      add_help=False)
 
-    parser.add_argument('-h', '--host', default='127.0.0.1',
-                        help='the ip address of the server')
+    parser.add_argument('-h', '--host', default='127.0.0.1:9000',
+                        help='the ip:port address of the server')
     parser.add_argument('-s', '--suite', default='all',
                         help='testsuite to execute')
     parser.add_argument('-b', '--backend', default='cb',
