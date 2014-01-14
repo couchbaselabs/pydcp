@@ -28,10 +28,15 @@ class ParametrizedTestCase(unittest.TestCase):
         self.host = host
         self.port = port
 
+        if host.find(':') != -1:
+           self.host, self.rest_port = host.split(':')
+        else:
+           self.rest_port = 9000
+
     def initialize_backend(self):
         print ''
         logging.info("-------Setup Test Case-------")
-        self.rest_client = RestClient(self.host)
+        self.rest_client = RestClient(self.host, port=self.rest_port)
         if (self.backend == RemoteServer.MCD):
             self.memcached_backend_setup()
         else:
@@ -56,7 +61,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.mcd_client.shutdown()
 
     def couchbase_backend_setup(self):
-        self.rest_client = RestClient(self.host)
+        self.rest_client = RestClient(self.host, port=self.rest_port)
         for bucket in self.rest_client.get_all_buckets():
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
@@ -174,7 +179,6 @@ class UprTestCase(ParametrizedTestCase):
     client as a consumer or producer.  Excepts request
     to throw client error"""
     def test_add_stream_without_connection(self):
-
         op = self.upr_client.add_stream(0, 0)
         response = op.next_response()
         assert response['status'] == ERR_ECLIENT
@@ -240,10 +244,59 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == ERR_NOT_SUPPORTED
 
+    """Request failover log without connection
+
+    attempts to retrieve failover log without establishing a connection to
+    a producer.  Expects operation is not supported"""
     def test_get_failover_log_command(self):
         op = self.upr_client.get_failover_log(0)
         response = op.next_response()
-        assert response['status'] == ERR_NOT_SUPPORTED
+        assert response['status'] == ERR_ECLIENT
+
+    """Request failover log from consumer
+
+    attempts to retrieve failover log from a consumer.  Expects
+    operation is not supported."""
+    def test_get_failover_log_consumer(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.get_failover_log(0)
+        response = op.next_response()
+        assert response['status'] == ERR_ECLIENT
+
+    """Request failover log from producer
+
+    retrieve failover log from a producer. Expects to successfully recieve
+    failover log and for it to match upr stats."""
+    def test_get_failover_log_producer(self):
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.get_failover_log(0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('failovers')
+        response = op.next_response()
+        assert response['value']['failovers:vb_0:0:seq'] == 0
+
+    """Request failover log from invalid vbucket
+
+    retrieve failover log from invalid vbucket. Expects to not_my_vbucket from producer."""
+    def test_get_failover_invalid_vbucket(self):
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.get_failover_log(1025)
+        response = op.next_response()
+        assert response['status'] == ERR_NOT_MY_VBUCKET
 
     """Basic upr stream request
 
