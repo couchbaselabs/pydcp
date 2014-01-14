@@ -244,10 +244,59 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == ERR_NOT_SUPPORTED
 
+    """Request failover log without connection
+
+    attempts to retrieve failover log without establishing a connection to
+    a producer.  Expects operation is not supported"""
     def test_get_failover_log_command(self):
         op = self.upr_client.get_failover_log(0)
         response = op.next_response()
-        assert response['status'] == ERR_NOT_SUPPORTED
+        assert response['status'] == ERR_ECLIENT
+
+    """Request failover log from consumer
+
+    attempts to retrieve failover log from a consumer.  Expects
+    operation is not supported."""
+    def test_get_failover_log_consumer(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.get_failover_log(0)
+        response = op.next_response()
+        assert response['status'] == ERR_ECLIENT
+
+    """Request failover log from producer
+
+    retrieve failover log from a producer. Expects to successfully recieve
+    failover log and for it to match upr stats."""
+    def test_get_failover_log_producer(self):
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.get_failover_log(0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('failovers')
+        response = op.next_response()
+        assert response['value']['failovers:vb_0:0:seq'] == 0
+
+    """Request failover log from invalid vbucket
+
+    retrieve failover log from invalid vbucket. Expects to not_my_vbucket from producer."""
+    def test_get_failover_invalid_vbucket(self):
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.get_failover_log(1025)
+        response = op.next_response()
+        assert response['status'] == ERR_NOT_MY_VBUCKET
 
     """Basic upr stream request
 
