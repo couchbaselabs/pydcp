@@ -245,6 +245,23 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == ERR_ECLIENT
 
+
+    """Close a consumer stream. Expects close operation to
+    return a success."""
+    def test_close_consumer_stream(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.close_stream(0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
     """Request failover log without connection
 
     attempts to retrieve failover log without establishing a connection to
