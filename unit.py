@@ -98,7 +98,6 @@ class ExpTestCase(ParametrizedTestCase):
     def tearDown(self):
         self.destroy_backend() 
 
-
 class UprTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
@@ -487,6 +486,51 @@ class UprTestCase(ParametrizedTestCase):
                 last_by_seqno = response['by_seqno']
                 mutations = mutations + 1
         assert mutations == 10
+
+    """Receive mutation from upr stream from a later sequence
+
+    Stores 10 items into vbucket 0 and then creates an upr stream to
+    retrieve items from sequence number 7 to 10 on (4 items).
+    """
+    def test_stream_request_with_ops_start_sequence(self):
+        op = self.mcd_client.stop_persistence()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket-seqno')
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        end_seqno = int(resp['value']['vb_0_high_seqno'])
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+        high_seqno = long(resp['value']['failovers:vb_0:0:seq'])
+
+        mutations = 0
+        last_by_seqno = 0
+        start_seqno = 7
+        op = self.upr_client.stream_req(
+            0, 0, start_seqno, end_seqno, vb_uuid, high_seqno)
+        while op.has_response():
+            response = op.next_response()
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
+            if response['opcode'] == 87:
+                assert response['value'] == 'value'
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+        assert mutations == 4
 
     """Basic upr stream request (Receives mutations/deletions)
 
