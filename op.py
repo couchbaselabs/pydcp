@@ -117,6 +117,9 @@ class GetFailoverLog(Operation):
         assert cas == 0
         assert keylen == 0
         assert extlen == 0
+
+        if status == SUCCESS:
+            assert len(body) % 16 == 0
         self.responses.put({ 'opcode' : opcode,
                              'status' : status,
                              'value'  : body })
@@ -146,7 +149,7 @@ class StreamRequest(Operation):
                        'status' : status }
 
             if status == SUCCESS:
-                assert (len(body) % 8) == 0
+                assert (len(body) % 16) == 0
                 result['failover_log'] = []
 
                 pos = 0
