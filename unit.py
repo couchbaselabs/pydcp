@@ -463,6 +463,7 @@ class UprTestCase(ParametrizedTestCase):
             if response['opcode'] == 83:
                 assert response['status'] == SUCCESS
             if response['opcode'] == 87:
+                assert response['value'] == 'value'
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
                 mutations = mutations + 1
