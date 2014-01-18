@@ -469,6 +469,61 @@ class UprTestCase(ParametrizedTestCase):
                 mutations = mutations + 1
         assert mutations == 10
 
+    """Receive mutation from upr stream from a later sequence
+
+    Stores 10 items into vbucket 0 and then creates an upr stream to
+    retrieve items from sequence number 7 to 10 on (4 items).
+    """
+    def test_stream_request_with_ops_start_sequence(self):
+        op = self.mcd_client.stop_persistence()
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket-seqno')
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        end_seqno = int(resp['value']['vb_0_high_seqno'])
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        # XXX vmx 2014-01-18: Getting the failover log with get_failover_log()
+        # is currently broken (body size isn't even % 8 == 0), hence do a
+        # stream request request to get the current failover log
+        #op = self.upr_client.get_failover_log(0)
+        #response = op.next_response()
+        #assert response['status'] == SUCCESS
+        #print 'failoverlog', response
+        #vb_uuid, high_seqno = response['failover_log'][0]
+        op = self.upr_client.stream_req(0, 0, 0, 0, 0, 0)
+        while op.has_response():
+            response = op.next_response()
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
+                vb_uuid, high_seqno = response['failover_log'][0]
+
+        mutations = 0
+        last_by_seqno = 0
+        start_seqno = 7
+        op = self.upr_client.stream_req(
+            0, 0, start_seqno, end_seqno, vb_uuid, high_seqno)
+        while op.has_response():
+            response = op.next_response()
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
+            if response['opcode'] == 87:
+                assert response['value'] == 'value'
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+        assert mutations == 4
+
     """Basic upr stream request (Receives mutations/deletions)
 
     Stores 10 items into vbucket 0 and then deletes 5 of thos items. After
