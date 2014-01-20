@@ -4,6 +4,7 @@ import select
 import socket
 import threading
 import time
+import op
 
 from constants import *
 from op import *
@@ -17,6 +18,7 @@ class Connection(threading.Thread):
         self.socket = None
         self.running = False
         self.ops = []
+        self.proxy = None
 
     def connect(self):
         logging.info("Connecting to %s:%d" % (self.host, self.port))
@@ -61,7 +63,7 @@ class Connection(threading.Thread):
 
             for reader in readers:
                 data = reader.recv(1024)
-                logging.debug("Read %d bytes off the wire" % len(data))
+                logging.debug("%s:%s Read %d bytes off the wire" % (self.host, self.port, len(data)))
                 if len(data) == 0:
                     self._connection_lost()
                 bytes_read += data
@@ -75,19 +77,29 @@ class Connection(threading.Thread):
 
                 rd_timeout = 0
                 body = bytes_read[HEADER_LEN:HEADER_LEN+bodylen]
+                packet = bytes_read[0:HEADER_LEN+bodylen]
                 bytes_read = bytes_read[HEADER_LEN+bodylen:]
 
-                found = False
-                for op in self.ops:
-                    if op.opaque == opaque:
-                        rm = op.add_response(opcode, keylen, extlen,
-                                                 status, cas, body)
+                processed = False
+                for oper in self.ops:
+                    if oper.opaque == opaque:
+                        logging.debug('%s:%s Process packet (magic %x)(opcode %x)(opaque %x)(status %x)'
+                                      % (self.host, self.port, magic, opcode, opaque, status))
+                        rm = oper.add_response(opcode, keylen, extlen,
+                                               status, cas, body)
                         if rm:
-                            self.ops.remove(op)
-                        found = True
+                            self.ops.remove(oper)
+                        processed = True
                         break
-                if not found:
-                    self._handle_random_opaque(opcode, status, opaque)
+
+                if not processed:
+                    if self.proxy is None:
+                        self._handle_random_opaque(opcode, status, opaque)
+                    else:
+                        logging.debug('%s:%s Proxy packet (magic %x)(opcode %x)(opaque %x)(status %x)\n%s'
+                                      % (self.host, self.port, magic, opcode, opaque, status,
+                                         op.packet_2_str(packet)))
+                        self.proxy.send(packet)
 
     def _handle_random_opaque(self, opcode, vbucket, opaque):
         if opcode == CMD_STREAM_REQ:
