@@ -61,6 +61,60 @@ def add_stream_demo():
     upr_client.shutdown()
     mcd_client.shutdown()
 
+def multiple_streams(host, port):
+    upr_client = UprClient(host, port)
+    mcd_client = McdClient(host, port)
+
+    op = upr_client.sasl_auth_plain('gamesim-sample', '')
+    response = op.next_response()
+    assert response['status'] == SUCCESS
+
+    op = mcd_client.sasl_auth_plain('gamesim-sample', '')
+    response = op.next_response()
+    assert response['status'] == SUCCESS
+
+    num_vbs = 10
+    op = mcd_client.stats('vbucket-seqno')
+    resp = op.next_response()
+    assert resp['status'] == SUCCESS
+
+    op = upr_client.open_producer("mystream")
+    response = op.next_response()
+    assert response['status'] == SUCCESS
+
+    streams = {}
+    for vb in range(num_vbs):
+        en = int(resp['value']['vb_%d_high_seqno' % vb])
+        op = upr_client.stream_req(vb, 0, 0, en, 0, 0)
+        print "Create stream vb %d st 0 en %d" %  (vb, en)
+        streams[vb] = {'op' : op,
+                       'mutations' : 0,
+                       'last_seqno' : 0 }
+
+    while len(streams) > 0:
+        for vb in streams.keys():
+            if streams[vb]['op'].has_response():
+                response = streams[vb]['op'].next_response()
+                if response['opcode'] == CMD_STREAM_REQ:
+                    assert response['status'] == SUCCESS
+                elif response['opcode'] == CMD_SNAPSHOT_MARKER:
+                    pass
+                elif response['opcode'] == CMD_MUTATION:
+                    assert response['by_seqno'] > streams[vb]['last_seqno']
+                    streams[vb]['last_seqno'] = response['by_seqno']
+                    streams[vb]['mutations'] = streams[vb]['mutations'] + 1
+
+                    vb = response['vbucket']
+                    key = response['key']
+                    seqno =  response['by_seqno']
+                    print 'VB: %d got key %s with seqno %d' % (vb, key, seqno)
+                else:
+                    del streams[vb]
+
+    upr_client.shutdown()
+    mcd_client.shutdown()
+
 if __name__ == "__main__":
     #simple_handshake_demo()
-    add_stream_demo()
+    #add_stream_demo()
+    multiple_streams('127.0.0.1', 12000)
