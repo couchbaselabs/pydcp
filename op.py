@@ -218,6 +218,20 @@ class StreamRequest(Operation):
 
 ############################ Memcached Operations ############################
 
+class SaslPlain(Operation):
+    def __init__(self, username, password):
+        value = '\0'.join(['', username, password])
+        Operation.__init__(self, CMD_SASL_AUTH, 0, 0, 0, 'PLAIN', value)
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        self.end = True
+        self.responses.put({ 'opcode': opcode,
+                             'status': status })
+        return True
+
+    def _get_extras(self):
+        return ''
+
 class Stats(Operation):
     def __init__(self, type):
         Operation.__init__(self, CMD_STATS, 0, 0, 0, type, '')

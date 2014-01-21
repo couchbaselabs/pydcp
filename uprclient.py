@@ -11,6 +11,11 @@ class UprClient():
         self.conn = Connection(host, port)
         self.conn.connect()
 
+    def sasl_auth_plain(self, username, password):
+        op = SaslPlain(username, password)
+        self.conn.queue_operation(op)
+        return op
+
     def open_consumer(self, name):
         op = OpenConnection(FLAG_OPEN_CONSUMER, name)
         self.conn.queue_operation(op)

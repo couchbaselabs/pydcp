@@ -10,6 +10,11 @@ class McdClient():
         self.conn = Connection(host, port)
         self.conn.connect()
 
+    def sasl_auth_plain(self, username, password):
+        op = SaslPlain(username, password)
+        self.conn.queue_operation(op)
+        return op
+
     def stats(self, type = ''):
         op = Stats(type)
         self.conn.queue_operation(op)

@@ -28,6 +28,7 @@ CMD_SET               = 0x01
 CMD_DELETE            = 0x04
 CMD_FLUSH             = 0x08
 CMD_STATS             = 0x10
+CMD_SASL_AUTH         = 0x21
 CMD_STOP_PERSISTENCE  = 0x80
 CMD_START_PERSISTENCE = 0x81
 
