@@ -773,6 +773,33 @@ class McdTestCase(ParametrizedTestCase):
         assert resp['status'] == SUCCESS
         assert resp['value']['curr_items'] == '0'
 
+    def test_stat_vbucket_seqno(self):
+        """Tests the vbucket-seqno stat.
+
+        Insert 10 documents and check if the sequence number has the
+        correct value.
+        """
+        for i in range(10):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket-seqno 0')
+        resp = op.next_response()
+        assert resp['status'] == SUCCESS
+        seqno = int(resp['value']['vb_0_high_seqno'])
+        assert seqno == 10
+
+    def test_stat_vbucket_seqno_not_my_vbucket(self):
+        """Tests the vbucket-seqno NOT_MY_VBUCKET (0x07) response.
+
+        Use a vBucket id that is way to hight in order to get a
+        NOT_MY_VBUCKET (0x04) response back.
+        """
+        op = self.mcd_client.stats('vbucket-seqno 100000')
+        resp = op.next_response()
+        assert resp['status'] == ERR_NOT_MY_VBUCKET
+
     def test_stats_tap(self):
         op = self.mcd_client.stats('tap')
         resp = op.next_response()
