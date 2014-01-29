@@ -167,24 +167,25 @@ class StreamRequest(Operation):
             assert keylen == 0
             assert extlen == 4
             flags = struct.unpack(">I", body[0:4])[0]
-            self.responses.put({ 'opcode' : opcode,
+            self.responses.put({ 'opcode'  : opcode,
                                  'vbucket' : status,
-                                 'flags'  : flags })
+                                 'flags'   : flags })
             self.ended = True
             return True
         elif opcode == CMD_MUTATION:
             logging.info("(Stream Request) Received mutation")
-            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len = \
-                struct.unpack(">QQIIIH", body[0:30])
-            key = body[30:30+keylen]
-            value = body[30+keylen:]
+            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
+                struct.unpack(">QQIIIHB", body[0:31])
+            key = body[31:31+keylen]
+            value = body[31+keylen:]
             self.responses.put({ 'opcode'     : opcode,
-                                 'vbucket'     : status,
+                                 'vbucket'    : status,
                                  'by_seqno'   : by_seqno,
                                  'rev_seqno'  : rev_seqno,
                                  'flags'      : flags,
                                  'expiration' : exp,
                                  'lock_time'  : lock_time,
+                                 'nru'        : nru,
                                  'key'        : key,
                                  'value'      : value })
         elif opcode == CMD_DELETION:
@@ -193,14 +194,14 @@ class StreamRequest(Operation):
                 struct.unpack(">QQH", body[0:18])
             key = body[18:18+keylen]
             self.responses.put({ 'opcode'     : opcode,
-                                 'vbucket'     : status,
+                                 'vbucket'    : status,
                                  'by_seqno'   : by_seqno,
                                  'rev_seqno'  : rev_seqno,
                                  'key'        : key })
         elif opcode == CMD_SNAPSHOT_MARKER:
             logging.info("(Stream Request) Received snapshot marker")
             self.responses.put({ 'opcode'     : opcode,
-                                 'vbucket'     : status })
+                                 'vbucket'    : status })
         else:
             logging.error("(Stream Request) Unknown response: %s" % opcode)
 
