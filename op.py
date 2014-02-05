@@ -117,6 +117,7 @@ class GetFailoverLog(Operation):
         assert cas == 0
         assert keylen == 0
         assert extlen == 0
+        assert len(body) % 16 == 0
         self.responses.put({ 'opcode' : opcode,
                              'status' : status,
                              'value'  : body })
