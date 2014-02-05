@@ -337,6 +337,7 @@ class UprTestCase(ParametrizedTestCase):
 
     Opens a producer connection and then tries to create a stream with a seqno
     that is way too large. The stream should be closed with a range error."""
+    @unittest.skip("Bug in ep-engine")
     def test_stream_request_start_seqno_too_high(self):
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
@@ -355,7 +356,7 @@ class UprTestCase(ParametrizedTestCase):
 
     Opens a producer connection and then tries to create a stream with an
     invalid VBucket. Should get a not my vbucket error."""
-    def test_stream_request_start_seqno_too_high(self):
+    def test_stream_request_invalid_vbucket(self):
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
         assert response['status'] == SUCCESS
@@ -404,7 +405,7 @@ class UprTestCase(ParametrizedTestCase):
     Opens a producer connection and then tries to create a stream with a start
     seqno that is bigger than the end seqno. The stream should be closed with an
     range error."""
-    def test_stream_request_start_seqno_too_high(self):
+    def test_stream_request_start_seqno_bigger_than_end_seqno(self):
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
         assert response['status'] == SUCCESS
