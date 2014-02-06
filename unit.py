@@ -247,7 +247,6 @@ class UprTestCase(ParametrizedTestCase):
 
     """Close a consumer stream. Expects close operation to
     return a success."""
-    @unittest.skip("Bug in ep-engine")
     def test_close_consumer_stream(self):
 
         op = self.upr_client.open_consumer("mystream")
