@@ -217,7 +217,6 @@ class UprTestCase(ParametrizedTestCase):
     Creates two clients each with consumers using the same key.
     Attempts to add stream to first consumer and second consumer.
     Expects that adding stream to second consumer passes"""
-    @unittest.skip("Broken on server")
     def test_add_stream_to_duplicate_consumer(self):
 
         op = self.upr_client.open_consumer("mystream")
