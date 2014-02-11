@@ -1,6 +1,7 @@
 
 import logging
 import time
+import random
 
 try:
     import unittest2 as unittest
@@ -96,7 +97,7 @@ class ExpTestCase(ParametrizedTestCase):
         self.initialize_backend()
 
     def tearDown(self):
-        self.destroy_backend() 
+        self.destroy_backend()
 
 class UprTestCase(ParametrizedTestCase):
     def setUp(self):
@@ -120,6 +121,7 @@ class UprTestCase(ParametrizedTestCase):
         assert response['value']['eq_uprq:mystream:type'] == 'consumer'
 
         self.upr_client.shutdown()
+        time.sleep(1)
         op = self.mcd_client.stats('upr')
         response = op.next_response()
         assert 'eq_uprq:mystream:type' not in response['value']
@@ -139,9 +141,160 @@ class UprTestCase(ParametrizedTestCase):
         assert response['value']['eq_uprq:mystream:type'] == 'producer'
 
         self.upr_client.shutdown()
+        time.sleep(1)
         op = self.mcd_client.stats('upr')
         response = op.next_response()
         assert 'eq_uprq:mystream:type' not in response['value']
+
+    """Open consumer connection same key
+
+    Verifies a single consumer connection can be opened.  Then opens a
+    second consumer connection with the same key as the original.  Expects
+    that the first consumer connection is closed.  Stats should reflect 1
+    consumer connected
+    """
+    @unittest.skip("Broken")
+    def test_open_consumer_connection_same_key(self):
+        stream="mystream"
+        op = self.upr_client.open_consumer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        c1_stats = op.next_response()
+        assert c1_stats['value']['eq_uprq:'+stream+':type'] == 'consumer'
+
+        time.sleep(2)
+        c2_stats = None
+        for i in range(10):
+            op = self.upr_client.open_consumer(stream)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+
+            op = self.mcd_client.stats('upr')
+            c2_stats = op.next_response()
+
+        assert c2_stats is not None
+        assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'consumer'
+        assert c2_stats['value']['ep_upr_count'] == '1'
+
+        assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
+           c2_stats['value']['eq_uprq:'+stream+':created']
+
+
+    """Open producer same key
+
+    Verifies a single producer connection can be opened.  Then opens a
+    second consumer connection with the same key as the original.  Expects
+    that the first producer connection is closed.  Stats should reflect 1
+    producer connected.
+    """
+    @unittest.skip("Broken")
+    def test_open_producer_connection_same_key(self):
+        stream="mystream"
+        op = self.upr_client.open_producer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        c1_stats = op.next_response()
+        assert c1_stats['value']['eq_uprq:'+stream+':type'] == 'producer'
+
+        time.sleep(2)
+        c2_stats = None
+        for i in range(10):
+            op = self.upr_client.open_producer(stream)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+            op = self.mcd_client.stats('upr')
+            c2_stats = op.next_response()
+
+        assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'producer'
+        assert c2_stats['value']['ep_upr_count'] == '1'
+
+        assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
+           c2_stats['value']['eq_uprq:'+stream+':created']
+
+
+    """ Open consumer empty name
+
+    Tries to open a consumer connection with empty string as name.  Expects
+    to recieve a client error.
+    """
+    def test_open_consumer_no_name(self):
+        op = self.upr_client.open_consumer("")
+        response = op.next_response()
+        assert response['status'] == ERR_EINVAL
+
+    """ Open producer empty name
+
+    Tries to open a producer connection with empty string as name.  Expects
+    to recieve a client error.
+    """
+    def test_open_producer_no_name(self):
+        op = self.upr_client.open_producer("")
+        response = op.next_response()
+        assert response['status'] == ERR_EINVAL
+
+    """ Open connection higher sequence number
+
+    Use the extra's field of the open connection command to set the seqno of a
+    single upr connection.  Then open another connection with a seqno higher than
+    the original connection. Expects the original connections are terminiated.
+    """
+    @unittest.skip("seq-no's are ignored")
+    def test_open_connection_higher_sequence_number(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+
+        for i in xrange(128):
+            stream = "mystream{0}".format(i)
+            op = self.upr_client.open_consumer(stream, i)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert response['value']['eq_uprq:mystream:connected'] == 'false'
+
+    """ Open connection negative sequence number
+
+        Use the extra's field of the open connection command and set the seqno to
+        a negative value. Expects client error response.
+    """
+    @unittest.skip("seq-no's are ignored")
+    def test_open_connection_negative_sequence_number(self):
+
+        op = self.upr_client.open_consumer("mystream", -1)
+        response = op.next_response()
+        assert response['status'] != SUCCESS
+
+    """ Open n producers and consumers
+
+    Open n consumer and n producer connections.  Check upr stats and verify number
+    of open connections = 2n with corresponding values for each conenction type.
+    Expects each open connection response return true.
+    """
+    @unittest.skip("Broken")
+    def test_open_n_consumer_producers(self):
+        n = 1024
+        ops = []
+        for i in range(n):
+            op = self.upr_client.open_consumer("consumer{0}".format(i))
+            ops.append(op)
+            op = self.upr_client.open_producer("producer{0}".format(i))
+            ops.append(op)
+
+        for op in ops:
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        stats = op.next_response()
+        assert stats['value']['ep_upr_count'] == str(n * 2)
 
     """Basic add stream test
 
@@ -156,27 +309,6 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.add_stream(0, 0)
         response = op.next_response()
         assert response['status'] == SUCCESS
-
-    """VBucket add stream test
-
-    This test verifies a stream can be added for all existing vbuckets whether
-    active or replica.  Expects the stream response to return SUCCESS."""
-    def test_add_stream_command(self):
-
-        op = self.upr_client.open_consumer("mystream")
-        response = op.next_response()
-        assert response['status'] == SUCCESS
-
-        op = self.mcd_client.stats('vbucket')
-        response = op.next_response()
-        assert response['status'] == SUCCESS
-
-        # parsing keys: 'vb_1', 'vb_0',...
-        vb_ids = [int(v.split('_')[1]) for v in response['value'] if v != '']
-        for i in vb_ids:
-            op = self.upr_client.add_stream(i, 0)
-            response = op.next_response()
-            assert response['status'] == SUCCESS
 
 
     """Add stream to producer
@@ -258,6 +390,88 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
+    """
+    Add a stream to consumer with the takeover flag set = 1.  Expects add stream
+    command to return successfully.
+    """
+    def test_add_stream_takeover(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 1)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+    """
+        Open n consumer connection.  Add one stream to each consumer for the same
+        vbucket.  Expects every add stream request to succeed.
+    """
+    @unittest.skip("Broken")
+    def test_add_stream_n_consumers_1_stream(self):
+        n = 16
+
+        for i in xrange(n):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+
+            stream = "mystream{0}".format(i)
+            op = self.upr_client.open_consumer(stream)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+            op = self.upr_client.add_stream(0, 1)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        stats = op.next_response()
+        assert stats['value']['ep_upr_count'] == str(n)
+
+    """
+        Open n consumer connection.  Add n streams to each consumer for unique vbucket
+        per connection. Expects every add stream request to succeed.
+    """
+    @unittest.skip("Broken")
+    def test_add_stream_n_consumers_n_streams(self):
+        n = 16
+
+        vb_ids = self.all_vbucket_ids()
+        for i in xrange(n):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+
+            stream = "mystream{0}".format(i)
+            op = self.upr_client.open_consumer(stream)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+            for vb in vb_ids:
+                op = self.upr_client.add_stream(vb, 0)
+                response = op.next_response()
+                assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        stats = op.next_response()
+        assert stats['value']['ep_upr_count'] == str(n)
+
+    """
+        Open a single consumer and add stream for all active vbuckets with the
+        takeover flag set in the request.  Expects every add stream request to succeed.
+    """
+    def add_stream_takeover_all_vbuckets(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        # parsing keys: 'vb_1', 'vb_0',...
+        vb_ids = self.all_vbucket_ids()
+        for i in vb_ids:
+            op = self.upr_client.add_stream(i, 1)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+
     """Close stream that has not been initialized.
     Expects client error."""
     def test_close_stream_command(self):
@@ -281,6 +495,69 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.close_stream(0)
         response = op.next_response()
         assert response['status'] == SUCCESS
+
+
+    """
+        Open a consumer connection.  Add stream for a selected vbucket.  Then close stream.
+        Immediately after closing stream send a request to add stream again.  Expects that
+        stream can be added after closed.
+    """
+    def test_close_stream_reopen(self):
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_KEY_EEXISTS
+
+        op = self.upr_client.close_stream(0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+    """
+        open and close stream as a consumer then takeover
+        stream as producer and attempt to reopen stream
+        from same vbucket
+    """
+    @unittest.skip("Broken")
+    def test_close_stream_reopen_as_producer(self):
+       op = self.upr_client.open_consumer("mystream")
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.add_stream(0, 0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.close_stream(0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.open_producer("mystream")
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.stream_req(0, 0, 0, 0, 0, 0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.open_consumer("mystream")
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.close_stream(0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
 
     """Request failover log without connection
 
@@ -335,6 +612,90 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.get_failover_log(1025)
         response = op.next_response()
         assert response['status'] == ERR_NOT_MY_VBUCKET
+
+
+    """Failover log during stream request
+
+    Open a producer connection and send and add_stream request with high end_seqno.
+    While waiting for end_seqno to be reached send request for failover log
+    and Expects that producer is still able to return failover log
+    while consumer has an open add_stream request.
+    """
+    def test_failover_log_during_stream_request(self):
+
+        stream = "mystream"
+        op = self.upr_client.open_producer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        response = req_op.next_response()
+        seqno = response['failover_log'][0][0]
+        assert response['status'] == SUCCESS
+        fail_op = self.upr_client.get_failover_log(0)
+        response = fail_op.next_response()
+        assert response['status'] == SUCCESS
+        assert response['value'][0][0] == seqno
+
+    """Failover log with ops
+
+    Open a producer connection to a vbucket and start loading data to node.
+    After expected number of items have been created send request for failover
+    log and expect seqno to match number
+    """
+    def test_failover_log_with_ops(self):
+
+        stream = "mystream"
+        op = self.upr_client.open_producer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        response = req_op.next_response()
+        seqno = response['failover_log'][0][0]
+        assert response['status'] == SUCCESS
+
+        for i in range(100):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+            resp = req_op.next_response()
+
+            if (i % 10) == 0:
+                fail_op = self.upr_client.get_failover_log(0)
+                response = fail_op.next_response()
+                assert response['status'] == SUCCESS
+                assert response['value'][0][0] == seqno
+
+
+    """Request failover from n producers from n vbuckets
+
+    Open n producers and attempt to fetch failover log for n vbuckets on each producer.
+    Expects expects all requests for failover log to succeed and that the log for
+    similar buckets match.
+    """
+    def test_failover_log_n_producers_n_vbuckets(self):
+
+        n = 1024
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        vb_ids = self.all_vbucket_ids()
+        expected_seqnos = {}
+        for id_ in vb_ids:
+            op = self.upr_client.get_failover_log(id_)
+            response = op.next_response()
+            expected_seqnos[id_] = response['value'][0][0]
+
+        for i in range(n):
+            stream = "mystream{0}".format(i)
+            op = self.upr_client.open_producer(stream)
+            vbucket_id = vb_ids[random.randint(0,len(vb_ids) -1)]
+            op = self.upr_client.get_failover_log(vbucket_id)
+            response = op.next_response()
+            assert response['value'][0][0] == expected_seqnos[vbucket_id]
+
 
     """Basic upr stream request
 
@@ -636,10 +997,10 @@ class UprTestCase(ParametrizedTestCase):
             response = op.next_response()
             if response['opcode'] == 83:
                 assert response['status'] == SUCCESS
-            if response['opcode'] == 83:
                 state = Stats.get_stat(self.mcd_client,
                                        'eq_uprq:mystream:stream_0_state', 'upr')
-                assert state == 'backfilling'
+                if state != 'dead':
+                    assert state == 'backfilling'
             if response['opcode'] == 86:
                 markers = markers + 1
             if response['opcode'] == 87:
@@ -784,6 +1145,14 @@ class UprTestCase(ParametrizedTestCase):
                     assert streams[vb]['mutations'] == num_ops
                     del streams[vb]
 
+    def all_vbucket_ids(self):
+        op = self.mcd_client.stats('vbucket')
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+        # parsing keys: 'vb_1', 'vb_0',...
+        vb_ids = [int(v.split('_')[1]) for v in response['value'] if v != '']
+        return vb_ids
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
@@ -851,6 +1220,7 @@ class McdTestCase(ParametrizedTestCase):
         assert Stats.wait_for_stat(self.mcd_client, 'curr_items', 0)
 
     def test_start_stop_persistence(self):
+        retry = 5
         op = self.mcd_client.stop_persistence()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
@@ -859,13 +1229,18 @@ class McdTestCase(ParametrizedTestCase):
         resp = op.next_response()
         assert resp['status'] == SUCCESS
 
-        time.sleep(2)
+        while retry > 0:
+            time.sleep(2)
 
-        op = self.mcd_client.stats()
-        resp = op.next_response()
-        assert resp['status'] == SUCCESS
-        assert resp['value']['ep_flusher_state'] == 'paused'
+            op = self.mcd_client.stats()
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+            state = resp['value']['ep_flusher_state']
+            if state == 'paused':
+               break
+            retry = retry - 1
 
+        assert state == 'paused'
         op = self.mcd_client.start_persistence()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
