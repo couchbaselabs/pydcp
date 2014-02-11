@@ -157,6 +157,28 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
+    """VBucket add stream test
+
+    This test verifies a stream can be added for all existing vbuckets whether
+    active or replica.  Expects the stream response to return SUCCESS."""
+    def test_add_stream_command(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket')
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        # parsing keys: 'vb_1', 'vb_0',...
+        vb_ids = [int(v.split('_')[1]) for v in response['value'] if v != '']
+        for i in vb_ids:
+            op = self.upr_client.add_stream(i, 0)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+
     """Add stream to producer
 
     Attempt to add stream to a producer connection. Expects to recieve
