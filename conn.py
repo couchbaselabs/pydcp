@@ -105,7 +105,7 @@ class Connection(threading.Thread):
         if opcode == CMD_STREAM_REQ:
             logging.info("Recieve stream request")
             resp = struct.pack(PKT_HEADER_FMT, RES_MAGIC, opcode,
-                               0, 0, 0, vbucket, 16, opaque, 0)
+                               0, 0, 0, SUCCESS, 16, opaque, 0)
             body = struct.pack("<QQ", 123456, 0)
             logging.info("Sending stream response")
             self.socket.send(resp + body)
