@@ -143,6 +143,119 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert 'eq_uprq:mystream:type' not in response['value']
 
+    """Open consumer connection same key
+
+    Verifies a single consumer connection can be opened.  Then opens a
+    second consumer connection with the same key as the original.  Expects
+    that the first consumer connection is closed.  Stats should reflect 1
+    consumer connected
+    """
+    def test_open_consumer_connection_same_key(self):
+        stream="mystream"
+        op = self.upr_client.open_consumer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        c1_stats = op.next_response()
+        assert c1_stats['value']['eq_uprq:'+stream+':type'] == 'consumer'
+
+        time.sleep(2)
+        c2_stats = None
+        for i in range(10):
+            op = self.upr_client.open_consumer(stream)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+
+            op = self.mcd_client.stats('upr')
+            c2_stats = op.next_response()
+
+        assert c2_stats is not None
+        assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'consumer'
+        assert c2_stats['value']['ep_upr_count'] == '1'
+
+        assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
+           c2_stats['value']['eq_uprq:'+stream+':created']
+
+
+    """Open producer same key
+
+    Verifies a single producer connection can be opened.  Then opens a
+    second consumer connection with the same key as the original.  Expects
+    that the first producer connection is closed.  Stats should reflect 1
+    producer connected.
+    """
+    def test_open_producer_connection_same_key(self):
+        stream="mystream"
+        op = self.upr_client.open_producer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        c1_stats = op.next_response()
+        assert c1_stats['value']['eq_uprq:'+stream+':type'] == 'producer'
+
+        time.sleep(2)
+        c2_stats = None
+        for i in range(10):
+            op = self.upr_client.open_producer(stream)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+            op = self.mcd_client.stats('upr')
+            c2_stats = op.next_response()
+
+        assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'producer'
+        assert c2_stats['value']['ep_upr_count'] == '1'
+
+        assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
+           c2_stats['value']['eq_uprq:'+stream+':created']
+
+
+    """ Open consumer empty name
+
+    Tries to open a consumer connection with empty string as name.  Expects
+    to recieve a client error.
+    """
+    def test_open_consumer_no_name(self):
+        op = self.upr_client.open_consumer("")
+        response = op.next_response()
+        assert response['status'] == ERR_EINVAL
+
+    """ Open producer empty name
+
+    Tries to open a producer connection with empty string as name.  Expects
+    to recieve a client error.
+    """
+    def test_open_producer_no_name(self):
+        op = self.upr_client.open_producer("")
+        response = op.next_response()
+        assert response['status'] == ERR_EINVAL
+
+    """ Open n producers and consumers
+
+    Open n consumer and n producer connections.  Check upr stats and verify number
+    of open connections = 2n with corresponding values for each conenction type.
+    Expects each open connection response return true.
+    """
+    def test_open_n_consumer_producers(self):
+        n = 1024
+        ops = []
+        for i in range(n):
+            op = self.upr_client.open_consumer("consumer{0}".format(n))
+            ops.append(op)
+            op = self.upr_client.open_producer("producer{0}".format(n))
+            ops.append(op)
+
+        for op in ops:
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        stats = op.next_response()
+        assert stats['value']['ep_upr_count'] == (1024 * 2)
+
     """Basic add stream test
 
     This test verifies a simple add stream command. It expects that a stream
