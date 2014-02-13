@@ -243,9 +243,9 @@ class UprTestCase(ParametrizedTestCase):
         n = 1024
         ops = []
         for i in range(n):
-            op = self.upr_client.open_consumer("consumer{0}".format(n))
+            op = self.upr_client.open_consumer("consumer{0}".format(i))
             ops.append(op)
-            op = self.upr_client.open_producer("producer{0}".format(n))
+            op = self.upr_client.open_producer("producer{0}".format(i))
             ops.append(op)
 
         for op in ops:
@@ -254,7 +254,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
-        assert stats['value']['ep_upr_count'] == (1024 * 2)
+        assert stats['value']['ep_upr_count'] == str(n * 2)
 
     """Basic add stream test
 
