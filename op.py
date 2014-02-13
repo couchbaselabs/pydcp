@@ -120,9 +120,18 @@ class GetFailoverLog(Operation):
 
         if status == SUCCESS:
             assert len(body) % 16 == 0
+        failover_log = []
+
+        pos = 0
+        bodylen = len(body)
+        while bodylen > pos:
+            vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos+16])
+            failover_log.append((vb_uuid, seqno))
+            pos += 16
+
         self.responses.put({ 'opcode' : opcode,
                              'status' : status,
-                             'value'  : body })
+                             'value'  : failover_log})
         self.end = True
         return True
 
