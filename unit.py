@@ -1,6 +1,7 @@
 
 import logging
 import time
+import random
 
 try:
     import unittest2 as unittest
@@ -335,6 +336,96 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.get_failover_log(1025)
         response = op.next_response()
         assert response['status'] == ERR_NOT_MY_VBUCKET
+
+
+    """Failover log during stream request 
+
+    Open a producer connection and send and add_stream request with high end_seqno.
+    While waiting for end_seqno to be reached send request for failover log
+    and Expects that producer is still able to return failover log
+    while consumer has an open add_stream request.
+    """
+    def test_failover_log_during_stream_request(self):
+
+        stream = "mystream"
+        op = self.upr_client.open_producer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        response = req_op.next_response()
+        seqno = response['failover_log'][0][0]
+        assert response['status'] == SUCCESS
+        fail_op = self.upr_client.get_failover_log(0)
+        response = fail_op.next_response()
+        assert response['status'] == SUCCESS
+        assert response['value'][0][0] == seqno
+
+    """Failover log with ops
+
+    Open a producer connection to a vbucket and start loading data to node.
+    After expected number of items have been created send request for failover
+    log and expect seqno to match number
+    """
+    def test_failover_log_with_ops(self):
+
+        stream = "mystream"
+        op = self.upr_client.open_producer(stream)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        response = req_op.next_response()
+        seqno = response['failover_log'][0][0]
+        assert response['status'] == SUCCESS
+
+        for i in range(100):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+            resp = req_op.next_response()
+
+            if (i % 10) == 0:
+                fail_op = self.upr_client.get_failover_log(0)
+                response = fail_op.next_response()
+                assert response['status'] == SUCCESS
+                assert response['value'][0][0] == seqno
+
+
+    """Request failover from n producers from n vbuckets
+
+    Open n producers and attempt to fetch failover log for n vbuckets on each producer.
+    Expects expects all requests for failover log to succeed and that the log for
+    similar buckets match.
+    """
+    def test_failover_log_n_producers_n_vbuckets(self):
+
+        n = 1024
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('vbucket')
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        # parsing keys: 'vb_1', 'vb_0',...
+        vb_ids = [int(v.split('_')[1]) for v in response['value'] if v != '']
+        expected_seqnos = {}
+        for id_ in vb_ids:
+            op = self.upr_client.get_failover_log(id_)
+            response = op.next_response()
+            expected_seqnos[id_] = response['value'][0][0]
+
+        for i in range(n):
+            stream = "mystream{0}".format(i)
+            op = self.upr_client.open_producer(stream)
+            vbucket_id = vb_ids[random.randint(0,len(vb_ids) -1)]
+            op = self.upr_client.get_failover_log(vbucket_id)
+            response = op.next_response()
+            print response
+            assert response['value'][0][0] == expected_seqnos[vbucket_id]
+
 
     """Basic upr stream request
 
