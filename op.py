@@ -68,7 +68,7 @@ class OpenConnection(Operation):
         return True
 
     def _get_extras(self):
-        return struct.pack(">II", self.seqno, self.flags)
+        return struct.pack(">iI", self.seqno, self.flags)
 
 class AddStream(Operation):
     def __init__(self, vbucket, flags):

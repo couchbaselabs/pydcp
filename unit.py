@@ -254,6 +254,17 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['value']['eq_uprq:mystream:connected'] == 'false'
 
+    """ Open connection negative sequence number
+
+        Use the extra's field of the open connection command and set the seqno to
+        a negative value. Expects client error response.
+    """
+    def test_open_connection_negative_sequence_number(self):
+
+        op = self.upr_client.open_consumer("mystream", -1)
+        response = op.next_response()
+        assert response['status'] != SUCCESS
+
     """ Open n producers and consumers
 
     Open n consumer and n producer connections.  Check upr stats and verify number
