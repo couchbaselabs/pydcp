@@ -233,6 +233,27 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == ERR_EINVAL
 
+    """ Open connection higher sequence number
+
+    Use the extra's field of the open connection command to set the seqno of a
+    single upr connection.  Then open another connection with a seqno higher than
+    the original connection. Expects the original connections are terminiated.
+    """
+    def test_open_connection_higher_sequence_number(self):
+
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+
+        for i in xrange(128):
+            stream = "mystream{0}".format(i)
+            op = self.upr_client.open_consumer(stream, i)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert response['value']['eq_uprq:mystream:connected'] == 'false'
+
     """ Open n producers and consumers
 
     Open n consumer and n producer connections.  Check upr stats and verify number
