@@ -239,6 +239,7 @@ class UprTestCase(ParametrizedTestCase):
     single upr connection.  Then open another connection with a seqno higher than
     the original connection. Expects the original connections are terminiated.
     """
+    @unittest.skip("seq-no's are ignored")
     def test_open_connection_higher_sequence_number(self):
 
         op = self.upr_client.open_consumer("mystream")
@@ -259,6 +260,7 @@ class UprTestCase(ParametrizedTestCase):
         Use the extra's field of the open connection command and set the seqno to
         a negative value. Expects client error response.
     """
+    @unittest.skip("seq-no's are ignored")
     def test_open_connection_negative_sequence_number(self):
 
         op = self.upr_client.open_consumer("mystream", -1)
