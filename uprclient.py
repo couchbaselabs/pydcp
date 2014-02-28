@@ -19,13 +19,13 @@ class UprClient():
     def set_proxy(self, client):
         self.conn.proxy = client.conn.socket
 
-    def open_consumer(self, name):
-        op = OpenConnection(FLAG_OPEN_CONSUMER, name)
+    def open_consumer(self, name, seqno = 0):
+        op = OpenConnection(FLAG_OPEN_CONSUMER, name, seqno)
         self.conn.queue_operation(op)
         return op
 
-    def open_producer(self, name):
-        op = OpenConnection(FLAG_OPEN_PRODUCER, name)
+    def open_producer(self, name, seqno = 0):
+        op = OpenConnection(FLAG_OPEN_PRODUCER, name, seqno)
         self.conn.queue_operation(op)
         return op
 
