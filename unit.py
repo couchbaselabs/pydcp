@@ -282,6 +282,68 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
+
+    """
+        Open a consumer connection.  Add stream for a selected vbucket.  Then close stream. 
+        Immediately after closing stream send a request to add stream again.  Expects that
+        stream can be added after closed.
+    """
+    def test_close_stream_reopen(self):
+        op = self.upr_client.open_consumer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == ERR_KEY_EEXISTS 
+
+        op = self.upr_client.close_stream(0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.add_stream(0, 0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+    """
+        open and close stream as a consumer then takeover
+        stream as producer and attempt to reopen stream
+        from same vbucket  
+    """   
+    def test_close_stream_reopen_as_producer(self):
+       op = self.upr_client.open_consumer("mystream")
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.add_stream(0, 0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.close_stream(0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.open_producer("mystream")
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = upr_client.stream_req(0, 0, 0, 0, 0, 0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.open_consumer("mystream")
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+
+       op = self.upr_client.close_stream(0)
+       response = op.next_response()
+       assert response['status'] == SUCCESS
+       
+
     """Request failover log without connection
 
     attempts to retrieve failover log without establishing a connection to
