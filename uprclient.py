@@ -29,6 +29,11 @@ class UprClient():
         self.conn.queue_operation(op)
         return op
 
+    def open_notifier(self, name):
+            op = OpenConnection(FLAG_OPEN_NOTIFIER, name)
+        self.conn.queue_operation(op)
+        return op
+
     def add_stream(self, vbucket, flags):
         op = AddStream(vbucket, flags)
         self.conn.queue_operation(op)
