@@ -177,7 +177,6 @@ class UprTestCase(ParametrizedTestCase):
     that the first consumer connection is closed.  Stats should reflect 1
     consumer connected
     """
-    @unittest.skip("Broken")
     def test_open_consumer_connection_same_key(self):
         stream="mystream"
         op = self.upr_client.open_consumer(stream)
@@ -201,7 +200,7 @@ class UprTestCase(ParametrizedTestCase):
 
         assert c2_stats is not None
         assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'consumer'
-        assert c2_stats['value']['ep_upr_count'] == '1'
+        assert c2_stats['value']['ep_upr_count'] == '2'
 
         assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
            c2_stats['value']['eq_uprq:'+stream+':created']
@@ -214,7 +213,6 @@ class UprTestCase(ParametrizedTestCase):
     that the first producer connection is closed.  Stats should reflect 1
     producer connected.
     """
-    @unittest.skip("Broken")
     def test_open_producer_connection_same_key(self):
         stream="mystream"
         op = self.upr_client.open_producer(stream)
@@ -236,7 +234,7 @@ class UprTestCase(ParametrizedTestCase):
             c2_stats = op.next_response()
 
         assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'producer'
-        assert c2_stats['value']['ep_upr_count'] == '1'
+        assert c2_stats['value']['ep_upr_count'] == '2'
 
         assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
            c2_stats['value']['eq_uprq:'+stream+':created']
@@ -302,7 +300,6 @@ class UprTestCase(ParametrizedTestCase):
     of open connections = 2n with corresponding values for each conenction type.
     Expects each open connection response return true.
     """
-    @unittest.skip("Broken")
     def test_open_n_consumer_producers(self):
         n = 1024
         ops = []
@@ -318,7 +315,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
-        assert stats['value']['ep_upr_count'] == str(n * 2)
+        assert stats['value']['ep_upr_count'] == str(n * 2 + 1)
 
     """Basic add stream test
 
@@ -432,7 +429,6 @@ class UprTestCase(ParametrizedTestCase):
         Open n consumer connection.  Add one stream to each consumer for the same
         vbucket.  Expects every add stream request to succeed.
     """
-    @unittest.skip("Broken")
     def test_add_stream_n_consumers_1_stream(self):
         n = 16
 
@@ -450,13 +446,12 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
-        assert stats['value']['ep_upr_count'] == str(n)
+        assert stats['value']['ep_upr_count'] == str(n + 1)
 
     """
         Open n consumer connection.  Add n streams to each consumer for unique vbucket
         per connection. Expects every add stream request to succeed.
     """
-    @unittest.skip("Broken")
     def test_add_stream_n_consumers_n_streams(self):
         n = 16
 
@@ -476,7 +471,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
-        assert stats['value']['ep_upr_count'] == str(n)
+        assert stats['value']['ep_upr_count'] == str(n + 1)
 
     """
         Open a single consumer and add stream for all active vbuckets with the
