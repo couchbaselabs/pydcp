@@ -30,7 +30,7 @@ class UprClient():
         return op
 
     def open_notifier(self, name):
-            op = OpenConnection(FLAG_OPEN_NOTIFIER, name)
+        op = OpenConnection(FLAG_OPEN_NOTIFIER, name)
         self.conn.queue_operation(op)
         return op
 
