@@ -488,7 +488,7 @@ class UprTestCase(ParametrizedTestCase):
         op = self.mcd_client.stats('vbucket-seqno')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        end_seqno = int(resp['value']['vb_0_high_seqno'])
+        end_seqno = int(resp['value']['vb_0:high_seqno'])
 
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
@@ -526,7 +526,7 @@ class UprTestCase(ParametrizedTestCase):
         op = self.mcd_client.stats('vbucket-seqno')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        end_seqno = int(resp['value']['vb_0_high_seqno'])
+        end_seqno = int(resp['value']['vb_0:high_seqno'])
 
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
@@ -577,7 +577,7 @@ class UprTestCase(ParametrizedTestCase):
         op = self.mcd_client.stats('vbucket-seqno')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        end_seqno = int(resp['value']['vb_0_high_seqno'])
+        end_seqno = int(resp['value']['vb_0:high_seqno'])
 
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
@@ -615,7 +615,7 @@ class UprTestCase(ParametrizedTestCase):
         op = self.mcd_client.stats('vbucket-seqno')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        end_seqno = int(resp['value']['vb_0_high_seqno'])
+        end_seqno = int(resp['value']['vb_0:high_seqno'])
 
         Stats.wait_for_persistence(self.mcd_client)
         assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
@@ -761,7 +761,7 @@ class UprTestCase(ParametrizedTestCase):
 
         streams = {}
         for vb in range(4):
-            en = int(resp['value']['vb_%d_high_seqno' % vb])
+            en = int(resp['value']['vb_%d:high_seqno' % vb])
             op = self.upr_client.stream_req(vb, 0, 0, en, 0, 0)
             streams[vb] = {'op' : op,
                            'mutations' : 0,
