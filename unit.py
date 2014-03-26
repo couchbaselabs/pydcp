@@ -146,6 +146,30 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert 'eq_uprq:mystream:type' not in response['value']
 
+    def test_open_notifier_connection_command(self):
+        """Basic upr open notifier connection test
+
+        Verifies that when the open upr noifier command is used there is a
+        connection instance that is created on the server and that when the
+        tcp connection is closed the connection is remove from the server"""
+
+        op = self.upr_client.open_notifier("notifier")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert response['value']['eq_uprq:notifier:type'] == 'notifier'
+
+        self.upr_client.shutdown()
+        time.sleep(1)
+
+        op = self.mcd_client.stats('upr')
+        response = op.next_response()
+        assert 'eq_uprq:mystream:type' not in response['value']
+
+
+
     """Open consumer connection same key
 
     Verifies a single consumer connection can be opened.  Then opens a
@@ -1144,6 +1168,49 @@ class UprTestCase(ParametrizedTestCase):
                 else:
                     assert streams[vb]['mutations'] == num_ops
                     del streams[vb]
+
+    def test_stream_request_notifier(self):
+        """Open a notifier consumer and verify mutations are ready
+        to be streamed"""
+
+
+        op = self.upr_client.open_notifier("notifier")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        for i in range(100):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            resp = op.next_response()
+            assert resp['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, 0, 0, 0, 100)
+        response = op.next_response()
+        assert response['opcode'] == CMD_STREAM_REQ
+        response = op.next_response()
+        assert response['opcode'] == CMD_STREAM_END
+
+
+        op = self.upr_client.open_producer("producer")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+
+        mutations = 0
+        last_by_seqno = 0
+        op = self.upr_client.stream_req(0, 0, 0, 100, 0, 100)
+        while op.has_response():
+            response = op.next_response()
+            print response
+            if response['opcode'] == 83:
+                assert response['status'] == SUCCESS
+            if response['opcode'] == 87:
+                assert response['value'] == 'value'
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+                mutations = mutations + 1
+
+        assert mutations == 100
+
 
     def all_vbucket_ids(self):
         op = self.mcd_client.stats('vbucket')
