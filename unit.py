@@ -1333,8 +1333,44 @@ class RebTestCase(ParametrizedTestCase):
 
         assert rest.wait_for_rebalance(timeout)
 
+    def test_mutations_during_rebalance(self):
+        """verifies mutations can be streamed while cluster is rebalancing.
+           during rebalance an item is set and then a stream request is made
+           to get latest item along with all previous items"""
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
 
 
-    def test_ok(self):
-        assert True == True
+        # start rebalance
+        nodes = self.rest_client.get_nodes()
+        assert len(nodes) == 1
+        assert self.rest_client.rebalance(self.hosts[1:], [])
+
+        # load and stream docs
+        mutations = 0
+        doc_count = 100
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+        high_seqno = long(resp['value']['failovers:vb_0:0:seq'])
+
+        for i in range(doc_count):
+            op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            start_seqno = mutations
+            mutations = mutations + 1
+            op = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid, high_seqno)
+            last_by_seqno = 0
+            while op.has_response():
+                response = op.next_response()
+                if response['opcode'] == 83:
+                    assert response['status'] == SUCCESS
+                if response['opcode'] == 87:
+                    #print "%s v %s" % (response['by_seqno'], last_by_seqno)
+                    assert response['by_seqno'] > last_by_seqno
+                    last_by_seqno = response['by_seqno']
+
+        assert self.rest_client.wait_for_rebalance()
+
 
