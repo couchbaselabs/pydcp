@@ -12,12 +12,16 @@ from unit import *
 
 class PyUPR:
 
-    def __init__(self, suite, backend, host, port, xml):
+    def __init__(self, suite, backend, hosts, port, xml):
         self.suite = suite
         self.backend = backend
-        self.host = host
+        self.hosts = hosts
         self.port = port
         self.xml = xml
+
+    @property
+    def host(self):
+        return self.hosts[0]
 
     def run_test(self):
 
@@ -94,8 +98,8 @@ def main():
                                      usage='%(prog)s [options]',
                                      add_help=False)
 
-    parser.add_argument('-h', '--host', default='127.0.0.1:9000',
-                        help='the ip:port address of the server')
+    parser.add_argument('-h', '--hosts', default=['127.0.0.1:9000'], nargs='+',
+                        help='the ip:port address of the server(s) to test')
     parser.add_argument('-s', '--suite', default='all',
                         help='testsuite to execute')
     parser.add_argument('-b', '--backend', default='cb',
@@ -107,7 +111,7 @@ def main():
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    pyUpr = PyUPR(args.suite, backend, args.host, port, args.xml)
+    pyUpr = PyUPR(args.suite, backend, args.hosts, port, args.xml)
     pyUpr.run_test()
 
 if __name__ == "__main__":
