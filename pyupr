@@ -10,54 +10,63 @@ except ImportError:
 
 from unit import *
 
-def run_as_unittest_suite(suite):
-    unittest.TextTestRunner(verbosity=2).run(suite)
+class PyUPR:
 
-def run_as_xml_suite(suite):
-    import xmlrunner
-    xmlrunner.XMLTestRunner(verbosity=2, output="results").run(suite)
+    def __init__(self, suite, backend, host, port, xml):
+        self.suite = suite
+        self.backend = backend
+        self.host = host
+        self.port = port
+        self.xml = xml
 
-def run_upr_testsuite(backend, host, port, xml):
-    upr_suite = unittest.TestSuite()
-    upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase, backend,
-                                                       host, port))
-    if xml:
-        run_as_xml_suite(upr_suite)
-    else:
-        run_as_unittest_suite(upr_suite)
+    def run_test(self):
+
+        if self.suite == 'all':
+            self.run_upr_testsuite()
+            self.run_mcd_testsuite()
+        elif self.suite == 'upr':
+            self.run_upr_testsuite()
+        elif self.suite == 'mcd':
+            self.run_mcd_testsuite()
+        elif self.suite == 'exp':
+            self.run_exp_testsuite()
+        else:
+            print "Invalid testsuite type '%s'" % self.suite
+            sys.exit(0)
 
 
-def run_mcd_testsuite(backend, host, port, xml):
-    mcd_suite = unittest.TestSuite()
-    mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase, backend,
-                                                       host, port))
-    if xml:
-        run_as_xml_suite(mcd_suite)
-    else:
-        run_as_unittest_suite(mcd_suite)
+    def run_suite(self, suite):
+        if self.xml:
+            import xmlrunner
+            xmlrunner.XMLTestRunner(verbosity=2, output="results").run(suite)
+        else:
+            unittest.TextTestRunner(verbosity=2).run(suite)
 
-def run_exp_testsuite(backend, host, port, xml):
-    exp_suite = unittest.TestSuite()
-    exp_suite.addTest(ParametrizedTestCase.parametrize(ExpTestCase, backend,
-                                                       host, port))
-    if xml:
-        run_as_xml_suite(exp_suite)
-    else:
-        run_as_unittest_suite(exp_suite)
+    def run_upr_testsuite(self):
+        upr_suite = unittest.TestSuite()
+        upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase,
+                                                           self.backend,
+                                                           self.host,
+                                                           self.port))
+        self.run_suite(upr_suite)
 
-def run_testsuite(suite, backend, host, port, xml):
-    if suite == 'all':
-        run_upr_testsuite(backend, host, port, xml)
-        run_mcd_testsuite(backend, host, port, xml)
-    elif suite == 'upr':
-        run_upr_testsuite(backend, host, port, xml)
-    elif suite == 'mcd':
-        run_mcd_testsuite(backend, host, port, xml)
-    elif suite == 'exp':
-        run_exp_testsuite(backend, host, port, xml)
-    else:
-        print "Invalid testsuite type '%s'" % suite
-        sys.exit(0)
+    def run_mcd_testsuite(self):
+        mcd_suite = unittest.TestSuite()
+        mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase,
+                                                           self.backend,
+                                                           self.host,
+                                                           self.port))
+        self.run_suite(mcd_suite)
+
+    def run_exp_testsuite(self):
+        exp_suite = unittest.TestSuite()
+        exp_suite.addTest(ParametrizedTestCase.parametrize(ExpTestCase,
+                                                           self.backend,
+                                                           self.host,
+                                                           self.port))
+        self.run_suite(exp_suite)
+
+
 
 def get_remote_server(backend):
     if backend == 'cb':
@@ -98,7 +107,8 @@ def main():
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    run_testsuite(args.suite, backend, args.host, port, args.xml)
+    pyUpr = PyUPR(args.suite, backend, args.host, port, args.xml)
+    pyUpr.run_test()
 
 if __name__ == "__main__":
     main()
