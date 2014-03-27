@@ -1307,3 +1307,18 @@ class McdTestCase(ParametrizedTestCase):
         assert resp['status'] == SUCCESS
 
         Stats.wait_for_persistence(self.mcd_client)
+
+class RebTestCase(ParametrizedTestCase):
+    def __init__(self, methodName, backend, hosts, port):
+        self.hosts = hosts
+        super(RebTestCase, self).__init__(methodName, backend, hosts[0], port)
+
+    def setUp(self):
+        self.initialize_backend()
+
+    def tearDown(self):
+        self.destroy_backend()
+
+    def test_ok(self):
+        assert True == True
+

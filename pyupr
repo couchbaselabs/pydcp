@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import sys
 
 try:
     import unittest2 as unittest
@@ -34,6 +35,11 @@ class PyUPR:
             self.run_mcd_testsuite()
         elif self.suite == 'exp':
             self.run_exp_testsuite()
+        elif self.suite == 'reb':
+            if len(self.hosts) <= 1:
+                    print "At least 2 hosts required to run rebalance suite"
+                    sys.exit(0)
+            self.run_reb_testsuite()
         else:
             print "Invalid testsuite type '%s'" % self.suite
             sys.exit(0)
@@ -69,6 +75,14 @@ class PyUPR:
                                                            self.host,
                                                            self.port))
         self.run_suite(exp_suite)
+
+    def run_reb_testsuite(self):
+        reb_suite = unittest.TestSuite()
+        reb_suite.addTest(ParametrizedTestCase.parametrize(RebTestCase,
+                                                           self.backend,
+                                                           self.hosts,
+                                                           self.port))
+        self.run_suite(reb_suite)
 
 
 
