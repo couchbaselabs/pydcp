@@ -1200,7 +1200,6 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.stream_req(0, 0, 0, 100, 0, 100)
         while op.has_response():
             response = op.next_response()
-            print response
             if response['opcode'] == 83:
                 assert response['status'] == SUCCESS
             if response['opcode'] == 87:
