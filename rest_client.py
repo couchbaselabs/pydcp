@@ -13,7 +13,7 @@ class RestClient(object):
         self.password = password
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
 
-    def _http_request(self, api, method, params='', timeout=120):
+    def _http_request(self, api, method = "GET", params='', timeout=120):
         auth_str = '%s:%s' % (self.username, self.password)
         headers =  {'Content-Type': 'application/x-www-form-urlencoded',
                     'Authorization': 'Basic %s' % base64.encodestring(auth_str),
@@ -58,10 +58,116 @@ class RestClient(object):
                 buckets.append(item['name'].encode('ascii'))
         return buckets
 
+
+    def rebalance(self, nodes_in, nodes_out):
+
+
+        nodesOtpMap = self.get_nodes_otp_map()
+        ejectedNodes = [nodesOtpMap[n] for n in nodes_out if n in nodesOtpMap.keys()]
+        knownNodes  = self.add_nodes(nodes_in)
+
+        params = urllib.urlencode({'knownNodes': ','.join(knownNodes),
+                                   'ejectedNodes': ','.join(ejectedNodes),
+                                   'user': self.username,
+                                   'password': self.password})
+
+        api = self.baseUrl + "controller/rebalance"
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status:
+            print 'rebalance operation failed: {0}'.format(content)
+            print params
+
+        return status
+
+    def add_nodes(self, nodes_in):
+        """ and attempt to add new nodes to make known to cluster prior to rebalance
+            and returns list of known nodes otp ids
+        """
+        known_nodes = self.get_nodes()
+
+        for node in nodes_in:
+            if node not in known_nodes:
+                self.add_node(node)
+
+        return self.get_nodes_otp_map().values()
+
+    def add_node(self, addr ='', port='8091'):
+
+        otpNodeId = None
+        addr = addr.split(':')
+        remoteIp = addr[0]
+        if len(addr) > 1:
+            port = addr[1]
+
+        params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
+                                   'user': self.username,
+                                   'password': self.password})
+
+        api = self.baseUrl + 'controller/addNode'
+        status, content, header = self._http_request(api, 'POST', params)
+        if status:
+            json_parsed = json.loads(content)
+            otpNodeId = json_parsed['otpNode']
+        else:
+            print 'add_node error : {0}'.format(content)
+
+        return otpNodeId
+
+    def rebalance_statuses(self):
+        rebalanced = False
+        api = self.baseUrl + 'pools/rebalanceStatuses?waitChange=1'
+        status, content, header = self._http_request(api)
+        if status:
+            json_parsed = json.loads(content)
+            if 'balanced' in json_parsed:
+                rebalanced = json_parsed['balanced']
+        return rebalanced
+
+    def wait_for_rebalance(self, timeout = 60):
+        time.sleep(2)
+        rebalanced = self.rebalance_statuses()
+        while not rebalanced:
+            time.sleep(2)
+            timeout = timeout - 2
+            if timeout == 0:
+                print "Rebalance timed out"
+                break
+            rebalanced = self.rebalance_statuses()
+
+        time.sleep(2)
+        return rebalanced
+
+    def get_nodes_otp_map(self):
+        nodes = {}
+        api = self.baseUrl + 'pools/default'
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+
+        if status:
+            for node in json_parsed['nodes']:
+                hostname = node['hostname']
+                id_ = node['otpNode']
+                nodes[hostname] = id_
+
+        return nodes
+
+    def get_nodes(self):
+        return self.get_nodes_otp_map().keys()
+
+
+    def init_self(self):
+        api = self.baseUrl + 'settings/web'
+        params = urllib.urlencode({'port': self.port,
+                                   'username': self.username,
+                                   'password': self.password})
+        print 'settings/web params on {0}:{1}:{2}'.format(self.ip, self.port, params)
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
 if __name__ == "__main__":
     rest = RestClient('127.0.0.1')
     print rest.create_default_bucket()
     time.sleep(10)
-    
+
     for bucket in rest.get_all_buckets():
         print rest.delete_bucket(bucket)

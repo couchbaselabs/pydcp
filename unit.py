@@ -1315,9 +1315,25 @@ class RebTestCase(ParametrizedTestCase):
 
     def setUp(self):
         self.initialize_backend()
+        self.cluster_reset()
 
     def tearDown(self):
+        self.cluster_reset()
         self.destroy_backend()
+
+    def cluster_reset(self, timeout = 60):
+        """ rebalance out all nodes except one """
+
+        rest = RestClient(self.host, port=self.rest_port)
+        nodes = rest.get_nodes()
+        if len(nodes) > 1:
+            assert rest.rebalance([], self.hosts[1:])
+        elif len(nodes) == 0:
+            assert rest.init_self()
+
+        assert rest.wait_for_rebalance(timeout)
+
+
 
     def test_ok(self):
         assert True == True
