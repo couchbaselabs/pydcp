@@ -28,6 +28,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.backend = backend
         self.host = host
         self.port = port
+        self.replica = 1
 
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
@@ -67,7 +68,7 @@ class ParametrizedTestCase(unittest.TestCase):
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
         logging.info("Creating default bucket")
-        assert self.rest_client.create_default_bucket()
+        assert self.rest_client.create_default_bucket(self.replica)
         Stats.wait_for_warmup(self.host, self.port)
         self.upr_client = UprClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)

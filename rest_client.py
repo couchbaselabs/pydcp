@@ -33,12 +33,12 @@ class RestClient(object):
         status, content, header = self._http_request(api, 'DELETE')
         return status
 
-    def create_default_bucket(self):
+    def create_default_bucket(self, replica = 1):
         params = urllib.urlencode({'name': 'default',
                                    'authType': 'sasl',
                                    'saslPassword': '',
                                    'ramQuotaMB': 256,
-                                   'replicaNumber': 1,
+                                   'replicaNumber': replica,
                                    'proxyPort': 11211,
                                    'bucketType': 'membase',
                                    'replicaIndex': 1,
