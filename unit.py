@@ -547,7 +547,6 @@ class UprTestCase(ParametrizedTestCase):
         stream as producer and attempt to reopen stream
         from same vbucket
     """
-    @unittest.skip("Broken")
     def test_close_stream_reopen_as_producer(self):
        op = self.upr_client.open_consumer("mystream")
        response = op.next_response()
@@ -575,7 +574,7 @@ class UprTestCase(ParametrizedTestCase):
 
        op = self.upr_client.close_stream(0)
        response = op.next_response()
-       assert response['status'] == SUCCESS
+       assert response['status'] == ERR_KEY_ENOENT
 
 
     """Request failover log without connection
@@ -1372,5 +1371,4 @@ class RebTestCase(ParametrizedTestCase):
                     last_by_seqno = response['by_seqno']
 
         assert self.rest_client.wait_for_rebalance()
-
 
