@@ -2,6 +2,7 @@
 import logging
 import time
 import random
+import struct
 
 try:
     import unittest2 as unittest
@@ -1314,6 +1315,7 @@ class RebTestCase(ParametrizedTestCase):
         super(RebTestCase, self).__init__(methodName, backend, hosts[0], port)
 
     def setUp(self):
+        self.replica = len(self.hosts) - 1
         self.initialize_backend()
         self.cluster_reset()
 
@@ -1321,7 +1323,7 @@ class RebTestCase(ParametrizedTestCase):
         self.cluster_reset()
         self.destroy_backend()
 
-    def cluster_reset(self, timeout = 60):
+    def cluster_reset(self, timeout = 600):
         """ rebalance out all nodes except one """
 
         rest = RestClient(self.host, port=self.rest_port)
@@ -1332,6 +1334,22 @@ class RebTestCase(ParametrizedTestCase):
             assert rest.init_self()
 
         assert rest.wait_for_rebalance(timeout)
+
+    def mcd_reset(self, vbucket):
+        """set mcd to host where vbucket is active"""
+
+        info = self.rest_client.get_bucket_info()
+
+        assert info is not None, 'unable to fetch vbucket map'
+
+        host = info['vBucketServerMap']['serverList']\
+                [info['vBucketServerMap']['vBucketMap'][vbucket][0]]
+
+        assert ':' in host, 'direct port missing from serverList'
+
+        self.host = host.split(':')[0]
+        self.port = int(host.split(':')[1])
+        self.mcd_client = McdClient(self.host, self.port)
 
     def test_mutations_during_rebalance(self):
         """verifies mutations can be streamed while cluster is rebalancing.
@@ -1363,7 +1381,7 @@ class RebTestCase(ParametrizedTestCase):
             op = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid, high_seqno)
             last_by_seqno = 0
             while op.has_response():
-                response = op.next_response()
+                response = op.next_response(5)
                 if response['opcode'] == 83:
                     assert response['status'] == SUCCESS
                 if response['opcode'] == 87:
@@ -1371,5 +1389,76 @@ class RebTestCase(ParametrizedTestCase):
                     assert response['by_seqno'] > last_by_seqno
                     last_by_seqno = response['by_seqno']
 
-        assert self.rest_client.wait_for_rebalance()
+        assert self.rest_client.wait_for_rebalance(600)
+
+    def test_stream_during_rebalance_in_out(self):
+        """rebalance in/out while streaming mutations"""
+
+        def load(vbucket, doc_count = 100):
+            self.mcd_reset(vbucket)
+            for i in range(doc_count):
+                key = 'key %s' % (i)
+                op = self.mcd_client.set(key, 'value', vbucket, 0, 0)
+                response = op.next_response()
+                assert response['status'] == SUCCESS
+
+
+        def stream(vbucket = 0, rolling_back = False):
+            """ load doc_count items and stream them """
+            self.mcd_reset(vbucket)
+
+            op = self.upr_client.open_producer("mystream")
+            vb_stats = self.mcd_client.stats('vbucket-seqno').next_response()
+            fl_stats = self.mcd_client.stats('failovers').next_response()
+
+            vb_id = 'vb_%s' % vbucket
+            start_seqno = long(fl_stats['value']['failovers:'+vb_id+':0:seq'])
+            end_seqno = long(vb_stats['value'][vb_id+':high_seqno'])
+            vb_uuid = long(vb_stats['value'][vb_id+':uuid'])
+
+            op = self.upr_client.stream_req(0, 0,
+                                            start_seqno,
+                                            end_seqno,
+                                            vb_uuid, end_seqno)
+            last_by_seqno = start_seqno
+            while op.has_response():
+                response = op.next_response(timeout = 5)
+                assert response is not None, "response timeout"
+
+                if response['opcode'] == CMD_STREAM_REQ:
+                    if response['status'] == ERR_ROLLBACK:
+                        rback_seqno = response['err_msg']
+                        rollback_to = struct.unpack(">II",rback_seqno)
+                        assert rolling_back == False,\
+                                 "Got unexpected response to rollback to: %s, but start_seqno: %s" %\
+                                 (rollback_to, start_seqno)
+                        return stream(vbucket, rolling_back = True)
+                    else:
+                        assert response['status'] == SUCCESS
+                if response['opcode'] == CMD_MUTATION:
+                    #print "%s v %s" % (response['by_seqno'], last_by_seqno)
+                    assert response['by_seqno'] > last_by_seqno
+                    last_by_seqno = response['by_seqno']
+
+
+        nodes = self.rest_client.get_nodes()
+        assert len(nodes) == 1
+        vbucket = 0
+
+        # rebalance in
+        for host in self.hosts[1:]:
+            print "rebalance in: %s" % host
+            assert self.rest_client.rebalance([host], [])
+            load(vbucket)
+            assert self.rest_client.wait_for_rebalance(600)
+            stream(vbucket)
+
+        # rebalance out
+
+        for host in self.hosts[1:]:
+            print "rebalance out: %s" % host
+            assert self.rest_client.rebalance([], [host])
+            load(vbucket)
+            assert self.rest_client.wait_for_rebalance(600)
+            stream(vbucket)
 
