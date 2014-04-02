@@ -1240,7 +1240,7 @@ class McdTestCase(ParametrizedTestCase):
         op = self.mcd_client.stats('vbucket-seqno 0')
         resp = op.next_response()
         assert resp['status'] == SUCCESS
-        seqno = int(resp['value']['vb_0_high_seqno'])
+        seqno = int(resp['value']['vb_0:high_seqno'])
         assert seqno == 10
 
     def test_stat_vbucket_seqno_not_my_vbucket(self):
