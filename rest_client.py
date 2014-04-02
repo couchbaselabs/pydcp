@@ -137,6 +137,16 @@ class RestClient(object):
         time.sleep(2)
         return rebalanced
 
+    def get_bucket_info(self, bucket = 'default'):
+        info = None
+        api = self.baseUrl + 'pools/default/buckets/%s' % bucket
+        status, content, header = self._http_request(api)
+
+        if status:
+            info = json.loads(content)
+
+        return info
+
     def get_nodes_info(self):
         info = {}
         api = self.baseUrl + 'pools/default'
