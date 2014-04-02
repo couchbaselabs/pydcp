@@ -32,10 +32,15 @@ class Operation():
     def has_response(self):
         return self.responses.qsize() > 0 or not self.ended
 
-    def next_response(self):
-        if self.ended and self.responses.qsize() == 0:
-            return None
-        return self.responses.get(True)
+    def next_response(self, timeout = None):
+        response = None
+        if self.has_response():
+            try:
+                response = self.responses.get(True, timeout = timeout)
+            except:
+                logging.info("Empty response from op: %s" % self.opcode)
+
+        return response
 
     def bytes(self):
         extras = self._get_extras()
