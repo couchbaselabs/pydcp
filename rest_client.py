@@ -137,17 +137,24 @@ class RestClient(object):
         time.sleep(2)
         return rebalanced
 
-    def get_nodes_otp_map(self):
-        nodes = {}
+    def get_nodes_info(self):
+        info = {}
         api = self.baseUrl + 'pools/default'
         status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
 
         if status:
-            for node in json_parsed['nodes']:
-                hostname = node['hostname']
-                id_ = node['otpNode']
-                nodes[hostname] = id_
+            json_parsed = json.loads(content)
+            info = json_parsed['nodes']
+
+        return info
+
+    def get_nodes_otp_map(self):
+        nodes = {}
+
+        for node in self.get_nodes_info():
+            hostname = node['hostname']
+            id_ = node['otpNode']
+            nodes[hostname] = id_
 
         return nodes
 
