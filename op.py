@@ -172,6 +172,10 @@ class StreamRequest(Operation):
                     vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos+16])
                     result['failover_log'].append((vb_uuid, seqno))
                     pos += 16
+            elif status == ERR_ROLLBACK:
+
+                seqno = struct.unpack(">II",body)
+                result['seqno'] = seqno[0]
             else:
                 result['err_msg'] = body
 

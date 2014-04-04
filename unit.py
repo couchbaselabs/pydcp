@@ -1165,6 +1165,44 @@ class UprTestCase(ParametrizedTestCase):
                     assert streams[vb]['mutations'] == num_ops
                     del streams[vb]
 
+
+    """
+        Sends a stream request with start seqno greater than seqno of vbucket.  Expects
+        to receive a rollback response with seqno to roll back to
+    """
+    def test_stream_request_rollback(self):
+        op = self.upr_client.open_producer("rollback")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        self.mcd_client.set('key1', 'value', 0, 0, 0)
+        self.mcd_client.set('key2', 'value', 0, 0, 0)
+
+        vb_id = 'vb_0'
+        vb_stats = self.mcd_client.stats('vbucket-seqno').next_response()
+        fl_stats = self.mcd_client.stats('failovers').next_response()
+        fail_seqno = long(fl_stats['value']['failovers:'+vb_id+':0:seq'])
+        high_seqno = long(vb_stats['value'][vb_id+':high_seqno'])
+        vb_uuid = long(vb_stats['value'][vb_id+':uuid'])
+
+        op = self.upr_client.stream_req(0, 0, 1, high_seqno, vb_uuid, high_seqno)
+        response = op.next_response()
+        assert response['status'] == ERR_ROLLBACK
+        assert response['seqno'] == fail_seqno
+
+        start_seqno = response['seqno']
+        op = self.upr_client.stream_req(0, 0, start_seqno, high_seqno,
+                                        vb_uuid, high_seqno)
+
+        last_by_seqno = 0
+        while op.has_response():
+
+            response = op.next_response()
+            if response['opcode'] == CMD_MUTATION:
+                last_by_seqno = response['by_seqno']
+
+        assert last_by_seqno == high_seqno
+
     def test_stream_request_notifier(self):
         """Open a notifier consumer and verify mutations are ready
         to be streamed"""
@@ -1446,11 +1484,10 @@ class RebTestCase(ParametrizedTestCase):
 
                 if response['opcode'] == CMD_STREAM_REQ:
                     if response['status'] == ERR_ROLLBACK:
-                        rback_seqno = response['err_msg']
-                        rollback_to = struct.unpack(">II",rback_seqno)
+                        rback_seqno = response['seqno']
                         assert rolling_back == False,\
                                  "Got unexpected response to rollback to: %s, but start_seqno: %s" %\
-                                 (rollback_to, start_seqno)
+                                 (rback_seqno, start_seqno)
                         return stream(vbucket, rolling_back = True)
                     else:
                         assert response['status'] == SUCCESS
