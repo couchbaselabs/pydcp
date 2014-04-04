@@ -1381,11 +1381,13 @@ class RebTestCase(ParametrizedTestCase):
             op = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid, high_seqno)
             last_by_seqno = 0
             while op.has_response():
-                response = op.next_response(5)
+                response = op.next_response(10)
+                assert response is not None, "expected mutations to seqno: %s, last_seqno: %s" %\
+                        (mutations, last_by_seqno)
+
                 if response['opcode'] == 83:
                     assert response['status'] == SUCCESS
                 if response['opcode'] == 87:
-                    #print "%s v %s" % (response['by_seqno'], last_by_seqno)
                     assert response['by_seqno'] > last_by_seqno
                     last_by_seqno = response['by_seqno']
 
