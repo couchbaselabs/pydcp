@@ -113,14 +113,15 @@ class RestClient(object):
 
         return otpNodeId
 
-    def rebalance_statuses(self):
-        rebalanced = False
-        api = self.baseUrl + 'pools/rebalanceStatuses?waitChange=1'
+    def rebalance_statuses(self, bucket='default'):
+        rebalanced = True
+        api = self.baseUrl + 'pools/'+bucket+'/rebalanceProgress'
         status, content, header = self._http_request(api)
         if status:
             json_parsed = json.loads(content)
-            if 'balanced' in json_parsed:
-                rebalanced = json_parsed['balanced']
+            if 'status' in json_parsed:
+                if json_parsed['status'] == 'running':
+                    rebalanced = False
         return rebalanced
 
     def wait_for_rebalance(self, timeout = 60):
