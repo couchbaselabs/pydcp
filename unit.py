@@ -1272,6 +1272,28 @@ class UprTestCase(ParametrizedTestCase):
 
         assert last_by_seqno == high_seqno
 
+    """
+        Sends a stream request with start seqno greater than seqno of vbucket.  Expects
+        to receive a rollback response with seqno to roll back to.  Instead of rolling back
+        resend stream request n times each with high seqno's and expect rollback for each attempt.
+    """
+    def test_stream_request_n_rollbacks(self):
+        op = self.upr_client.open_producer("rollback")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        vb_stats = self.mcd_client.stats('vbucket-seqno').next_response()
+        vb_uuid = long(vb_stats['value']['vb_0:uuid'])
+
+        for n in range(1000):
+            self.mcd_client.set('key1', 'value', 0, 0, 0)
+
+            op = self.upr_client.stream_req(0, 0, n, (n+1), vb_uuid, (n+1))
+            response = op.next_response()
+            assert response['status'] == ERR_ROLLBACK
+            assert response['seqno'] == 0
+
+
     def test_stream_request_notifier(self):
         """Open a notifier consumer and verify mutations are ready
         to be streamed"""
