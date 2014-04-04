@@ -579,6 +579,52 @@ class UprTestCase(ParametrizedTestCase):
        assert response['status'] == ERR_KEY_ENOENT
 
 
+    """
+        Add stream to a consumer connection for a selected vbucket.  Start sending ops to node.
+        Send close stream command to selected vbucket.  Expects that consumer has not recieved any
+        subsequent mutations after producer recieved the close request.
+    """
+    def test_close_stream_with_ops(self):
+
+        stream_closed = False
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+
+        doc_count = 1000
+        for i in range(doc_count):
+            key = 'key %s' % (i)
+
+            op = self.mcd_client.set(key, 'value', 0, 0, 0)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+
+        op = self.upr_client.stream_req(0, 0, 0, doc_count, 0, 0)
+        last_by_seqno = 0
+        while op.has_response():
+
+            response = op.next_response(timeout = 5)
+
+            if response is None:
+                assert stream_closed, "Error: stopped recieving data but stream wasn't closed"
+                break
+
+            assert response['opcode'] != CMD_STREAM_END, "Error: recieved all mutations on closed stream"
+
+            if response['opcode'] == CMD_MUTATION:
+                last_by_seqno = response['by_seqno']
+
+            if not stream_closed:
+                close_op = self.upr_client.close_stream(0)
+                close_response = close_op.next_response()
+                assert close_response['status'] == SUCCESS, 'Error: producer did not recieve close request'
+                stream_closed = True
+
+        assert last_by_seqno < doc_count, "Error: recieved all mutations on closed stream"
+
     """Request failover log without connection
 
     attempts to retrieve failover log without establishing a connection to
