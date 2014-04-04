@@ -1375,11 +1375,22 @@ class RebTestCase(ParametrizedTestCase):
         high_seqno = long(resp['value']['failovers:vb_0:0:seq'])
 
         for i in range(doc_count):
+
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            response = op.next_response()
+            if response['status'] == ERR_NOT_MY_VBUCKET:
+                time.sleep(1)
+                self.mcd_reset(0)
+                op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+                response = op.next_response()
+
+            assert response['status'] == SUCCESS
+
             start_seqno = mutations
             mutations = mutations + 1
-            op = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid, high_seqno)
             last_by_seqno = 0
+            op = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid, high_seqno)
+
             while op.has_response():
                 response = op.next_response(10)
                 assert response is not None, "expected mutations to seqno: %s, last_seqno: %s" %\
@@ -1402,6 +1413,12 @@ class RebTestCase(ParametrizedTestCase):
                 key = 'key %s' % (i)
                 op = self.mcd_client.set(key, 'value', vbucket, 0, 0)
                 response = op.next_response()
+                if response['status'] == ERR_NOT_MY_VBUCKET:
+                    time.sleep(1)
+                    self.mcd_reset(vbucket)
+                    op = self.mcd_client.set(key, 'value', vbucket, 0, 0)
+                    response = op.next_response()
+
                 assert response['status'] == SUCCESS
 
 
