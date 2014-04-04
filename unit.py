@@ -625,6 +625,29 @@ class UprTestCase(ParametrizedTestCase):
 
         assert last_by_seqno < doc_count, "Error: recieved all mutations on closed stream"
 
+    """
+        Sets up a consumer connection.  Adds stream and then sends 2 close stream requests.  Expects
+        second request to close stream returns noent
+
+    """
+    def test_close_stream_twice(self):
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.stream_req(0, 0, 0, 1000, 0, 0)
+        response = op.next_response()
+        assert response['opcode'] == CMD_STREAM_REQ
+
+        op = self.upr_client.close_stream(0)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.upr_client.close_stream(0)
+        response = op.next_response()
+        assert response['status'] == ERR_KEY_ENOENT
+
     """Request failover log without connection
 
     attempts to retrieve failover log without establishing a connection to
