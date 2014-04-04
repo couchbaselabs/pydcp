@@ -1293,6 +1293,43 @@ class UprTestCase(ParametrizedTestCase):
             assert response['status'] == ERR_ROLLBACK
             assert response['seqno'] == 0
 
+    """
+        Send stream request command from n producers for the same vbucket.  Expect each request
+        to succeed for each producer and verify that expected number of mutations are received
+        for each request.
+    """
+    def test_stream_request_n_producers(self):
+        clients = []
+
+        for n in range(10):
+            client = UprClient(self.host, self.port)
+            op = client.open_producer("producer:%s" % n)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+            clients.append(client)
+
+
+        for n in range(10):
+            self.mcd_client.set('key', 'value', 0, 0, 0)
+
+            end_seqno = n  + 1
+            for client in clients:
+                op = client.stream_req(0, 0, 0, end_seqno, 0, end_seqno)
+                response = op.next_response()
+                assert response['status'] == SUCCESS
+
+                # stream changes and we should reach last seqno
+                # while never asked to rollback
+                last_seen = 0
+                while op.has_response():
+                    response = op.next_response(5)
+                    assert response is not None
+                    assert response['opcode'] != ERR_ROLLBACK
+                    if response['opcode'] == CMD_MUTATION:
+                        last_seen = response['by_seqno']
+
+                assert last_seen == end_seqno
+
 
     def test_stream_request_notifier(self):
         """Open a notifier consumer and verify mutations are ready
