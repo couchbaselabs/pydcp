@@ -29,6 +29,9 @@ class PyUPR:
         if self.suite == 'all':
             self.run_upr_testsuite()
             self.run_mcd_testsuite()
+            if len(self.hosts) > 1:
+                self.run_reb_testsuite()
+
         elif self.suite == 'upr':
             self.run_upr_testsuite()
         elif self.suite == 'mcd':
