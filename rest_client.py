@@ -201,6 +201,18 @@ class RestClient(object):
 
         return status
 
+    def stop_rebalance(self, wait_timeout=10):
+        api = self.baseUrl + '/controller/stopRebalance'
+        status, content, header = self._http_request(api, 'POST')
+        stopped = False
+        if status:
+            while wait_timeout > 0 and not stopped:
+                stopped = self.rebalance_statuses()
+                wait_timeout -= 1
+                time.sleep(1)
+
+        return stopped
+
 if __name__ == "__main__":
     rest = RestClient('127.0.0.1')
     print rest.create_default_bucket()
