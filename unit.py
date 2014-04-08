@@ -94,6 +94,14 @@ class ParametrizedTestCase(unittest.TestCase):
             suite.addTest(testcase_klass(name, backend, host, port))
         return suite
 
+    def all_vbucket_ids(self):
+        op = self.mcd_client.stats('vbucket')
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+        # parsing keys: 'vb_1', 'vb_0',...
+        vb_ids = [int(v.split('_')[1]) for v in response['value'] if v != '']
+        return vb_ids
+
 class ExpTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
@@ -1374,13 +1382,6 @@ class UprTestCase(ParametrizedTestCase):
         assert mutations == 100
 
 
-    def all_vbucket_ids(self):
-        op = self.mcd_client.stats('vbucket')
-        response = op.next_response()
-        assert response['status'] == SUCCESS
-        # parsing keys: 'vb_1', 'vb_0',...
-        vb_ids = [int(v.split('_')[1]) for v in response['value'] if v != '']
-        return vb_ids
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
