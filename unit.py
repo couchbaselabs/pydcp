@@ -1288,7 +1288,8 @@ class UprTestCase(ParametrizedTestCase):
         for n in range(1000):
             self.mcd_client.set('key1', 'value', 0, 0, 0)
 
-            op = self.upr_client.stream_req(0, 0, n, (n+1), vb_uuid, (n+1))
+            by_seqno = n + 1
+            op = self.upr_client.stream_req(0, 0, by_seqno, by_seqno+1, vb_uuid, by_seqno + 1)
             response = op.next_response()
             assert response['status'] == ERR_ROLLBACK
             assert response['seqno'] == 0
