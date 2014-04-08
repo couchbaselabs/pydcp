@@ -990,7 +990,7 @@ class UprTestCase(ParametrizedTestCase):
         high_seqno = long(resp['value']['failovers:vb_0:0:seq'])
 
         mutations = 0
-        last_by_seqno = 0
+        last_by_seqno = 7
         start_seqno = 7
         op = self.upr_client.stream_req(
             0, 0, start_seqno, end_seqno, vb_uuid, high_seqno)
@@ -1003,7 +1003,7 @@ class UprTestCase(ParametrizedTestCase):
                 assert response['by_seqno'] > last_by_seqno
                 last_by_seqno = response['by_seqno']
                 mutations = mutations + 1
-        assert mutations == 4
+        assert mutations == 3
 
     """Basic upr stream request (Receives mutations/deletions)
 
