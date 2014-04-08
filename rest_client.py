@@ -182,6 +182,20 @@ class RestClient(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def failover(self, node):
+        nodes = self.get_nodes_otp_map()
+        otpNode = nodes.get(node)
+        status = False
+
+        if otpNode:
+            api = self.baseUrl + 'controller/failOver'
+            params = urllib.urlencode({'otpNode': otpNode})
+            status, content, header = self._http_request(api, 'POST', params)
+            if not status:
+                print 'fail_over node {0} error : {1}'.format(otpNode, content)
+
+        return status
+
 if __name__ == "__main__":
     rest = RestClient('127.0.0.1')
     print rest.create_default_bucket()
