@@ -1648,3 +1648,70 @@ class RebTestCase(ParametrizedTestCase):
             assert self.rest_client.wait_for_rebalance(600)
             stream(vbucket)
 
+    def test_failover_swap_rebalance(self):
+        """ add and failover node then perform swap rebalance """
+
+        if len(self.hosts) <= 2:
+            print "at least 3 nodes needed for this test: %s provided" % len(self.hosts)
+            return True
+
+        nodeA = self.hosts[0]
+        nodeB = self.hosts[1]
+        nodeC = self.hosts[2]
+
+        # load data into each vbucket
+        vb_ids = self.all_vbucket_ids()
+        assert len(vb_ids) > 0
+        doc_count = 100000/len(vb_ids)
+
+        for i in range(doc_count):
+            for vb in vb_ids:
+                key = 'key:%s:%s' % (vb, i)
+                op = self.mcd_client.set(key, 'value', vb, 0, 0)
+                response = op.next_response()
+                assert response['status'] == SUCCESS, "Error loading data to vb: %s" % vb
+
+
+        # rebalance in nodeB
+        self.rest_client.rebalance([nodeB], [])
+        assert self.rest_client.wait_for_rebalance(600)
+
+        # create new rest client
+        if nodeB.find(':') != -1:
+           host, rest_port = nodeB.split(':')
+        else:
+           host, rest_port = nodeB, 8091
+        restB = RestClient(host, port = int(rest_port))
+
+        # add nodeC
+        restB.add_nodes([nodeC])
+
+        # set nodeA to failover
+        restB.failover(nodeA)
+
+        # rebalance out nodeA
+        restB.rebalance([], [nodeA])
+        assert restB.wait_for_rebalance(600)
+
+        # get bucketinfo and reset rest client in case we assert after
+        bucket_info = restB.get_bucket_info()
+
+        # verify expected seqnos of each vbid and failover table matches
+        assert 'nodes' in bucket_info
+        node_specs = bucket_info['nodes']
+        for spec in node_specs:
+            host = spec['hostname'].split(':')[0]
+            port = int(spec['ports']['direct'])
+            mcd_client = McdClient(host, port)
+            vb_stats = mcd_client.stats('vbucket-seqno').next_response()
+            assert 'value' in vb_stats
+            for vb in vb_ids:
+                key = 'vb_%s:high_seqno' % vb
+                assert key in vb_stats['value'], "Missing stats for %s: "% key
+                assert vb_stats['value'][key] == str(doc_count),\
+                    "expected high_seqno: %s, got: %s" % (doc_count, vb_stats['value'][key])
+
+
+        # remove nodeC before teardown
+        assert restB.rebalance([], [nodeC])
+        assert restB.wait_for_rebalance(600)
