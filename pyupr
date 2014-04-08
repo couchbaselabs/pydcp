@@ -17,76 +17,45 @@ class PyUPR:
         self.suite = suite
         self.backend = backend
         self.hosts = hosts
+        self.host = hosts[0]
         self.port = port
         self.xml = xml
-
-    @property
-    def host(self):
-        return self.hosts[0]
 
     def run_test(self):
 
         if self.suite == 'all':
-            self.run_upr_testsuite()
-            self.run_mcd_testsuite()
+            self.run_suite(UprTestCase)
+            self.run_suite(McdTestCase)
             if len(self.hosts) > 1:
-                self.run_reb_testsuite()
+                self.run_suite(RebTestCase)
 
         elif self.suite == 'upr':
-            self.run_upr_testsuite()
+            self.run_suite(UprTestCase)
         elif self.suite == 'mcd':
-            self.run_mcd_testsuite()
+            self.run_suite(McdTestCase)
         elif self.suite == 'exp':
-            self.run_exp_testsuite()
+            self.run_suite(ExpTestCase)
         elif self.suite == 'reb':
             if len(self.hosts) <= 1:
                     print "At least 2 hosts required to run rebalance suite"
                     sys.exit(0)
-            self.run_reb_testsuite()
+            self.run_suite(RebTestCase)
         else:
             print "Invalid testsuite type '%s'" % self.suite
             sys.exit(0)
 
+    def run_suite(self, testcase_klass):
+        kwargs = self.__dict__
+        kwargs['testcase_klass'] = testcase_klass
 
-    def run_suite(self, suite):
+        suite = unittest.TestSuite()
+        suite.addTest(ParametrizedTestCase.parametrize(**kwargs))
+
         if self.xml:
             import xmlrunner
             xmlrunner.XMLTestRunner(verbosity=2, output="results").run(suite)
         else:
             unittest.TextTestRunner(verbosity=2).run(suite)
-
-    def run_upr_testsuite(self):
-        upr_suite = unittest.TestSuite()
-        upr_suite.addTest(ParametrizedTestCase.parametrize(UprTestCase,
-                                                           self.backend,
-                                                           self.host,
-                                                           self.port))
-        self.run_suite(upr_suite)
-
-    def run_mcd_testsuite(self):
-        mcd_suite = unittest.TestSuite()
-        mcd_suite.addTest(ParametrizedTestCase.parametrize(McdTestCase,
-                                                           self.backend,
-                                                           self.host,
-                                                           self.port))
-        self.run_suite(mcd_suite)
-
-    def run_exp_testsuite(self):
-        exp_suite = unittest.TestSuite()
-        exp_suite.addTest(ParametrizedTestCase.parametrize(ExpTestCase,
-                                                           self.backend,
-                                                           self.host,
-                                                           self.port))
-        self.run_suite(exp_suite)
-
-    def run_reb_testsuite(self):
-        reb_suite = unittest.TestSuite()
-        reb_suite.addTest(ParametrizedTestCase.parametrize(RebTestCase,
-                                                           self.backend,
-                                                           self.hosts,
-                                                           self.port))
-        self.run_suite(reb_suite)
-
 
 
 def get_remote_server(backend):

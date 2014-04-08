@@ -24,12 +24,13 @@ class ParametrizedTestCase(unittest.TestCase):
     """ TestCase classes that want to be parametrized should
         inherit from this class.
     """
-    def __init__(self, methodName, backend, host, port):
+    def __init__(self, methodName, backend, host, port, kwargs):
         super(ParametrizedTestCase, self).__init__(methodName)
         self.backend = backend
         self.host = host
         self.port = port
         self.replica = 1
+        self.kwargs = kwargs
 
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
@@ -83,15 +84,16 @@ class ParametrizedTestCase(unittest.TestCase):
         self.rest_client = None
 
     @staticmethod
-    def parametrize(testcase_klass, backend, host, port):
+    def parametrize(testcase_klass=None, backend='cb', host='127.0.0.8091', port = 11210, **kwargs):
         """ Create a suite containing all tests taken from the given
             subclass, passing them the parameter 'param'.
         """
+        assert testcase_klass is not None
         testloader = unittest.TestLoader()
         testnames = testloader.getTestCaseNames(testcase_klass)
         suite = unittest.TestSuite()
         for name in testnames:
-            suite.addTest(testcase_klass(name, backend, host, port))
+            suite.addTest(testcase_klass(name, backend, host, port, kwargs))
         return suite
 
     def all_vbucket_ids(self):
@@ -1478,11 +1480,10 @@ class McdTestCase(ParametrizedTestCase):
         Stats.wait_for_persistence(self.mcd_client)
 
 class RebTestCase(ParametrizedTestCase):
-    def __init__(self, methodName, backend, hosts, port):
-        self.hosts = hosts
-        super(RebTestCase, self).__init__(methodName, backend, hosts[0], port)
 
     def setUp(self):
+        self.hosts = self.kwargs.get('hosts')
+        assert self.hosts is not None
         self.replica = len(self.hosts) - 1
         self.initialize_backend()
         self.cluster_reset()
