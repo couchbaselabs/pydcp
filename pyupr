@@ -13,21 +13,26 @@ from unit import *
 
 class PyUPR:
 
-    def __init__(self, suite, backend, hosts, port, xml):
+    def __init__(self, suite, backend, hosts, port, xml, only_tc):
         self.suite = suite
         self.backend = backend
         self.hosts = hosts
         self.host = hosts[0]
         self.port = port
         self.xml = xml
+        self.only_tc = only_tc
 
     def run_test(self):
 
         if self.suite == 'all':
-            self.run_suite(UprTestCase)
-            self.run_suite(McdTestCase)
-            if len(self.hosts) > 1:
-                self.run_suite(RebTestCase)
+
+            if self.only_tc is not None:
+                self.run_singular()
+            else:
+                self.run_suite(UprTestCase)
+                self.run_suite(McdTestCase)
+                if len(self.hosts) > 1:
+                    self.run_suite(RebTestCase)
 
         elif self.suite == 'upr':
             self.run_suite(UprTestCase)
@@ -56,6 +61,21 @@ class PyUPR:
             xmlrunner.XMLTestRunner(verbosity=2, output="results").run(suite)
         else:
             unittest.TextTestRunner(verbosity=2).run(suite)
+
+    def run_singular(self):
+
+        if self.only_tc.find('.') != -1:
+            klass, self.only_tc = self.only_tc.split('.')
+        else:
+            klass = 'UprTestCase'
+
+        try:
+            testcase_klass = eval(klass)
+            self.run_suite(testcase_klass)
+        except NameError:
+            print "TestClass does not exist: %s" % klass
+            sys.exit(0)
+
 
 
 def get_remote_server(backend):
@@ -93,11 +113,13 @@ def main():
     parser.add_argument('-v', '--verbosity', action='count',
                         help='verbosity level')
     parser.add_argument('-x', '--xml', action='store_true', default=False)
+    parser.add_argument('-o', '--only',
+                        help='specifiy the only test to run from a particular suite')
 
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    pyUpr = PyUPR(args.suite, backend, args.hosts, port, args.xml)
+    pyUpr = PyUPR(args.suite, backend, args.hosts, port, args.xml, args.only)
     pyUpr.run_test()
 
 if __name__ == "__main__":

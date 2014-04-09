@@ -92,8 +92,15 @@ class ParametrizedTestCase(unittest.TestCase):
         testloader = unittest.TestLoader()
         testnames = testloader.getTestCaseNames(testcase_klass)
         suite = unittest.TestSuite()
-        for name in testnames:
-            suite.addTest(testcase_klass(name, backend, host, port, kwargs))
+
+        if 'only_tc' in kwargs and kwargs['only_tc'] is not None:
+            func = kwargs['only_tc']
+            assert func in testnames, "TestCase not found: %s.%s" %\
+                (testcase_klass.__name__, func)
+            suite.addTest(testcase_klass(func, backend, host, port, kwargs))
+        else:
+            for name in testnames:
+                suite.addTest(testcase_klass(name, backend, host, port, kwargs))
         return suite
 
     def all_vbucket_ids(self):
