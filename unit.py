@@ -1723,3 +1723,65 @@ class RebTestCase(ParametrizedTestCase):
         # remove nodeC before teardown
         assert restB.rebalance([], [nodeC])
         assert restB.wait_for_rebalance(600)
+
+
+    def test_stream_req_during_failover(self):
+        """stream_req mutations before and after failover from state-changing vbucket"""
+
+        # start rebalance
+        nodes = self.rest_client.get_nodes()
+        assert len(nodes) == 1
+        assert self.rest_client.rebalance(self.hosts[1:], [])
+        assert self.rest_client.wait_for_rebalance(600)
+
+
+        # point clients to replica vbucket
+        vb_stats = self.mcd_client.stats('vbucket').next_response()
+        assert 'value' in vb_stats
+        replica_vbs = [key for key in vb_stats['value'].keys()\
+                    if vb_stats['value'][key] == 'replica']
+        assert len(replica_vbs) > 0 , 'No replica vbuckets, perhaps rebalance failed'
+        vb = int(replica_vbs[0].split('_')[-1])
+        self.mcd_reset(vb)
+
+        # create a separate client for stream requests
+        producer = UprClient(self.host, self.port)
+        op = producer.open_producer("producerstream")
+
+        # stream 1st item
+        self.mcd_client.set('key1', 'value', vb, 0, 0)
+        op = producer.stream_req(vb, 0, 0, 2, 0, 0)
+        response = op.next_response(5)
+        while response is not None:
+            if 'key' in response:
+                assert response['key'] == 'key1'
+            response = op.next_response(5)
+
+        # failover
+        failover_node = self.hosts[1]
+        assert self.rest_client.failover(failover_node)
+        self.mcd_reset(vb)
+        self.mcd_client.set('key2', 'value', vb, 0, 0)
+
+        # update producer
+        producer = UprClient(self.host, self.port)
+        producer.open_producer("producerstream")
+        op = producer.stream_req(vb, 0, 0, 2, 0, 0)
+
+        # stream both items after failover
+        assert self.rest_client.rebalance([], [failover_node])
+        while op.has_response():
+            response = op.next_response(15)
+            assert response is not None, "Timeout reading stream after failover"
+
+            if 'key' in response:
+                if response['by_seqno'] == 1:
+                    assert response['key'] == 'key1'
+                elif response['by_seqno'] == 2:
+                    assert response['key'] == 'key2'
+                else:
+                    assert False, "received unexpected mutation"
+            if response['opcode'] == CMD_STREAM_END:
+                break
+
+        assert self.rest_client.wait_for_rebalance(600)
