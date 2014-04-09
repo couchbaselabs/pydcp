@@ -91,13 +91,13 @@ class RestClient(object):
 
         return self.get_nodes_otp_map().values()
 
-    def add_node(self, addr ='', port='8091'):
+    def add_node(self, addr ='', port='8091', retries = 5):
 
         otpNodeId = None
-        addr = addr.split(':')
-        remoteIp = addr[0]
+        addr_ = addr.split(':')
+        remoteIp = addr_[0]
         if len(addr) > 1:
-            port = addr[1]
+            port = addr_[1]
 
         params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': self.username,
@@ -109,7 +109,12 @@ class RestClient(object):
             json_parsed = json.loads(content)
             otpNodeId = json_parsed['otpNode']
         else:
-            print 'add_node error : {0}'.format(content)
+            if retries > 0:
+                retries -= 1
+                time.sleep(5)
+                self.add_node(addr, port, retries)
+            else:
+                print 'add_node error : {0}'.format(content)
 
         return otpNodeId
 
