@@ -103,12 +103,17 @@ class ParametrizedTestCase(unittest.TestCase):
                 suite.addTest(testcase_klass(name, backend, host, port, kwargs))
         return suite
 
-    def all_vbucket_ids(self):
+    def all_vbucket_ids(self, type_ = None):
+        vb_ids = []
         op = self.mcd_client.stats('vbucket')
         response = op.next_response()
         assert response['status'] == SUCCESS
-        # parsing keys: 'vb_1', 'vb_0',...
-        vb_ids = [int(v.split('_')[1]) for v in response['value'] if v != '']
+
+        for vb in response['value']:
+            if vb != '' and (type_ is None or response['value'][vb] == type_):
+                vb_id = int(vb.split('_')[-1])
+                vb_ids.append(vb_id)
+
         return vb_ids
 
 class ExpTestCase(ParametrizedTestCase):
