@@ -1394,6 +1394,46 @@ class UprTestCase(ParametrizedTestCase):
                 assert last_seen == end_seqno
 
 
+    def test_stream_request_after_shutdown(self):
+        """
+        Load items from producer then shutdown producer and attempt to resume stream request
+        """
+
+        doc_count = 100
+        self.upr_client.open_producer("mystream")
+
+        for i in xrange(doc_count):
+            self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+        Stats.wait_for_persistence(self.mcd_client)
+
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+
+
+        op = self.upr_client.stream_req(0, 0, 0, doc_count,
+                                        vb_uuid, 0)
+        last_by_seqno = 0
+        while op.has_response():
+            response = op.next_response()
+            if response['opcode'] == CMD_MUTATION:
+                assert response['by_seqno'] > last_by_seqno
+                last_by_seqno = response['by_seqno']
+            if last_by_seqno == doc_count/2:
+                self.upr_client.shutdown()
+                break
+
+        self.upr_client = UprClient(self.host, self.port)
+        self.upr_client.open_producer("mystream")
+        op = self.upr_client.stream_req(0, 0, last_by_seqno, doc_count,
+                                        vb_uuid, 0)
+        while op.has_response():
+            response = op.next_response()
+            if response['opcode'] == CMD_MUTATION:
+                # first mutation should be at location we left off
+                assert response['key'] == 'key'+str(doc_count/2)
+                break
+
     def test_stream_request_notifier(self):
         """Open a notifier consumer and verify mutations are ready
         to be streamed"""
