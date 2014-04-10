@@ -670,6 +670,46 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == ERR_KEY_ENOENT
 
+    """
+        Test verifies that if multiple consumers are streaming from a vbucket
+        that if one of the consumer closes then the producer doesn't stop
+        sending changes to other consumers
+    """
+    def test_close_stream_n_consumers(self):
+
+        n = 16
+        for i in xrange(100):
+            self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+        Stats.wait_for_persistence(self.mcd_client)
+
+        # add stream to be close by different client
+        client2 = UprClient(self.host, self.port)
+        closestream = "closestream"
+        client2.open_consumer(closestream)
+        client2.add_stream(0, 0)
+
+
+        for i in xrange(n):
+
+            stream = "mystream{0}".format(i)
+            self.upr_client.open_consumer(stream)
+            self.upr_client.add_stream(0, 1)
+            if i == int(n/2):
+                # close stream
+                op = client2.close_stream(0)
+                response = op.next_response()
+                assert response['status'] == SUCCESS
+
+        time.sleep(2)
+        op = self.mcd_client.stats('upr')
+        stats = op.next_response()
+        key = "eq_uprq:{0}:stream_0_state".format(closestream)
+        assert stats['value'][key] == 'dead'
+
+        for i in xrange(n):
+            key = "eq_uprq:mystream{0}:stream_0_state".format(i)
+            assert stats['value'][key] in ('reading', 'pending')
+
     """Request failover log without connection
 
     attempts to retrieve failover log without establishing a connection to
