@@ -1790,3 +1790,70 @@ class RebTestCase(ParametrizedTestCase):
                 break
 
         assert self.rest_client.wait_for_rebalance(600)
+
+    def test_add_stream_during_failover(self):
+        """Verify consumer stream and its data remain on non-failover node"""
+
+        self.upr_client.open_consumer("mystream")
+        assert self.rest_client.rebalance(self.hosts[1:], [])
+        assert self.rest_client.wait_for_rebalance(600)
+
+        active_vbs = self.all_vbucket_ids('active')
+        replica_vbs = self.all_vbucket_ids('replica')
+        assert len(active_vbs) > 0, 'No active vbuckets on node'
+        assert len(replica_vbs) > 0, 'No replica vbuckets on node'
+
+        # load data into replica of node1 by loading into node2 active vbuckets
+        doc_count = 10
+        for vb in replica_vbs:
+            self.mcd_reset(vb)
+            for i in xrange(doc_count):
+                op = self.mcd_client.set('key' + str(i), 'value', vb, 0, 0)
+                response = op.next_response()
+                assert response['status'] == SUCCESS
+
+        # send add_stream request to node1 replica vbuckets
+        self.mcd_reset(active_vbs[0])
+        for vb in replica_vbs:
+            op = self.upr_client.add_stream(vb, 0)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+
+        for host in self.hosts[1:]:
+            assert self.rest_client.failover(host)
+
+        assert self.rest_client.rebalance([], self.hosts[1:])
+        assert self.rest_client.wait_for_rebalance(600)
+
+
+        # check consumer persisted and high_seqno are correct
+        time.sleep(2)
+        op = self.mcd_client.stats('upr')
+        stats = op.next_response()
+        upr_count = stats['value']['ep_upr_count']
+        assert int(upr_count) == 2,\
+                "Got upr_count = {0}, expected = {1}".format(upr_count, 2)
+
+        for vb in replica_vbs:
+            key = 'eq_uprq:mystream:stream_%s_start_seqno' % vb
+            assert key in stats['value'], "Stream %s missing from stats" % vb
+
+            start_seqno = stats['value'][key]
+            assert int(start_seqno) == doc_count,\
+                    "Expected seqno=%s got=%s" % (doc_count, start_seqno)
+
+        # verify data can be streamed
+        self.upr_client.open_producer("producerstream")
+        for vb in replica_vbs:
+            op = self.upr_client.stream_req(vb, 0, 0, doc_count, 0, doc_count)
+            last_by_seqno = 0
+            while op.has_response():
+                response = op.next_response(15)
+                assert response is not None, 'Timeout receiving response from stream'
+
+                if response['opcode'] == CMD_MUTATION:
+                    assert last_by_seqno < response['by_seqno']
+                    last_by_seqno = response['by_seqno']
+
+            assert last_by_seqno == doc_count
