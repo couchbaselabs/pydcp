@@ -118,6 +118,22 @@ class RestClient(object):
 
         return otpNodeId
 
+    def re_add_node(self, node):
+
+        nodesOtpMap = self.get_nodes_otp_map()
+        otpNode = nodesOtpMap.get(node)
+
+        if otpNode is None:
+            return False
+
+        api = self.baseUrl + 'controller/reAddNode'
+        params = urllib.urlencode({'otpNode': otpNode})
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status:
+            print 'add_back_node {0} error : {1}'.format(otpNode, content)
+
+        return status
+
     def rebalance_statuses(self, bucket='default'):
         rebalanced = True
         api = self.baseUrl + 'pools/'+bucket+'/rebalanceProgress'
