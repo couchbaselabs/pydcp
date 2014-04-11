@@ -1978,3 +1978,52 @@ class RebTestCase(ParametrizedTestCase):
             assert orig_uuid == long(fl_table2['value']['failovers:vb_'+str(vb)+':1:id'])
             new_uuid = long(fl_table2['value']['failovers:vb_'+str(vb)+':0:id'])
             assert orig_uuid != new_uuid
+
+    def test_stream_request_failover_add_back(self):
+        """Failover node while streaming mutationas then add_back and fetch same stream""" 
+        # rebalance in nodeB
+        nodeB = self.hosts[1]
+        assert self.rest_client.rebalance([nodeB], [])
+        assert self.rest_client.wait_for_rebalance(600)
+        replica_vbs = self.all_vbucket_ids('replica')
+        assert len(replica_vbs) > 0, "No replica vbuckets!"
+
+
+        # load data into replica vbucket
+        doc_count = 10
+        vb = replica_vbs[0]
+        self.mcd_reset(vb)
+        set_ops = [self.mcd_client.set('key' + str(i), 'value', vb, 0, 0)\
+                                                     for i in range(doc_count)]
+        assert all(map(lambda status: status == SUCCESS,\
+                            [op.next_response()['status'] for op in set_ops]))
+
+        def stream_and_failover():
+            """streaming mutations from nodeB"""
+
+            upr_client = UprClient(self.host, self.port)
+            upr_client.open_producer("mystream")
+            op = upr_client.stream_req(vb, 0, 0, doc_count, 0, doc_count)
+            last_by_seqno = 0
+            while op.has_response():
+                response = op.next_response(15)
+                print response
+                if 'value' in response:
+                    if response['opcode'] == CMD_MUTATION:
+                        # failover after streaming half docs
+                        last_by_seqno = response['by_seqno']
+                        if last_by_seqno == doc_count/2:
+                                assert self.rest_client.failover(nodeB)
+
+            assert last_by_seqno == doc_count
+
+        # failover and stream
+        stream_and_failover()
+
+        # add back
+        assert self.rest_client.re_add_node(nodeB)
+        assert self.rest_client.rebalance([nodeB], [])
+        assert self.rest_client.wait_for_rebalance(600)
+
+        # stream after addback
+        stream_and_failover()
