@@ -1937,3 +1937,44 @@ class RebTestCase(ParametrizedTestCase):
                     last_by_seqno = response['by_seqno']
 
             assert last_by_seqno == doc_count
+
+    def test_failover_log_table_updated(self):
+        """Verifies failover table entries are updated when vbucket ownership changes"""
+
+        # get original failover table
+        op = self.mcd_client.stats('failovers')
+        fl_table1 = op.next_response()
+        assert 'value' in fl_table1
+
+        # rebalance in nodeB
+        nodeB = self.hosts[1]
+        assert self.rest_client.rebalance([nodeB], [])
+        assert self.rest_client.wait_for_rebalance(600)
+        replica_vbs = self.all_vbucket_ids('replica')
+        assert len(replica_vbs) > 0, "No replica vbuckets!"
+        self.mcd_reset(replica_vbs[0])
+
+        # set and verify 1 item per nodeB vbucket
+        set_ops = [self.mcd_client.set('key' + str(vb), 'value', vb, 0, 0)\
+                                                        for vb in replica_vbs]
+        assert all(map(lambda status: status == SUCCESS,\
+                            [op.next_response()['status'] for op in set_ops]))
+
+        # failover nodeB
+        assert self.rest_client.failover(nodeB)
+        assert self.rest_client.rebalance([], [nodeB])
+        assert self.rest_client.wait_for_rebalance(600)
+        self.mcd_reset(0)
+
+        # get updated failover table
+        op = self.mcd_client.stats('failovers')
+        fl_table2 = op.next_response()
+        assert 'value' in fl_table2
+
+        # verify replica vbuckets have updated uuids
+        # and old uuid matches uuids from original table
+        for vb in replica_vbs:
+            orig_uuid = long(fl_table1['value']['failovers:vb_'+str(vb)+':0:id'])
+            assert orig_uuid == long(fl_table2['value']['failovers:vb_'+str(vb)+':1:id'])
+            new_uuid = long(fl_table2['value']['failovers:vb_'+str(vb)+':0:id'])
+            assert orig_uuid != new_uuid
