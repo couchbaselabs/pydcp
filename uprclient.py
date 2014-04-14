@@ -19,18 +19,17 @@ class UprClient():
     def set_proxy(self, client):
         self.conn.proxy = client.conn.socket
 
-    def open_consumer(self, name, seqno = 0):
-        op = OpenConnection(FLAG_OPEN_CONSUMER, name, seqno)
-        self.conn.queue_operation(op)
-        return op
+    def open_consumer(self, name):
+        return self.open_generic(FLAG_OPEN_CONSUMER, name)
 
-    def open_producer(self, name, seqno = 0):
-        op = OpenConnection(FLAG_OPEN_PRODUCER, name, seqno)
-        self.conn.queue_operation(op)
-        return op
+    def open_producer(self, name):
+        return self.open_generic(FLAG_OPEN_PRODUCER, name)
 
     def open_notifier(self, name):
-        op = OpenConnection(FLAG_OPEN_NOTIFIER, name)
+        return self.open_generic(FLAG_OPEN_NOTIFIER, name)
+
+    def open_generic(self, flag, name, seqno = 0, extras = None):
+        op = OpenConnection(flag, name, seqno, extras)
         self.conn.queue_operation(op)
         return op
 

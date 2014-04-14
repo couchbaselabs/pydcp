@@ -57,10 +57,11 @@ class Operation():
         return packet_2_str(self.bytes())
 
 class OpenConnection(Operation):
-    def __init__(self, flags, name, seqno = 0):
+    def __init__(self, flags, name, seqno = 0, extras = None):
         Operation.__init__(self, CMD_OPEN, 0, 0, 0, name, '')
         self.flags = flags
         self.seqno = seqno
+        self.extras = extras
 
     def add_response(self, opcode, keylen, extlen, status, cas, body):
         assert cas == 0
@@ -73,7 +74,7 @@ class OpenConnection(Operation):
         return True
 
     def _get_extras(self):
-        return struct.pack(">iI", self.seqno, self.flags)
+        return self.extras or struct.pack(">iI", self.seqno, self.flags)
 
 class AddStream(Operation):
     def __init__(self, vbucket, flags):

@@ -341,6 +341,31 @@ class UprTestCase(ParametrizedTestCase):
         stats = op.next_response()
         assert stats['value']['ep_upr_count'] == str(n * 2 + 1)
 
+    def test_open_notifier(self):
+        op = self.upr_client.open_notifier("notifier")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+    def test_open_notifier_no_name(self):
+        op = self.upr_client.open_notifier("")
+        response = op.next_response()
+        assert response['status'] == ERR_EINVAL
+
+    def test_open_connection_bad_fields(self):
+
+        bad_extras = [struct.pack(">cI", 'x', FLAG_OPEN_CONSUMER),
+                      struct.pack(">cI", 'x', FLAG_OPEN_PRODUCER),
+                      struct.pack(">cI", 'x', FLAG_OPEN_NOTIFIER),
+                      struct.pack(">??", True, False),
+                      struct.pack(">ic", 0, 'x')]
+
+        for extras in bad_extras:
+            op = self.upr_client.open_generic(None,"badconn",0,extras)
+            response = op.next_response()
+            assert response['opcode'] == CMD_OPEN
+            assert response['status'] != SUCCESS
+
+
     """Basic add stream test
 
     This test verifies a simple add stream command. It expects that a stream
