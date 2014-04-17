@@ -145,13 +145,15 @@ class GetFailoverLog(Operation):
         return ''
 
 class StreamRequest(Operation):
-    def __init__(self, vb, flags, start_seqno, end_seqno, vb_uuid, high_seqno):
+    def __init__(self, vb, flags, start_seqno, end_seqno, vb_uuid,
+                 snap_start_seqno, snap_end_seqno):
         Operation.__init__(self, CMD_STREAM_REQ, 0, vb, 0, '', '')
         self.flags = flags
         self.start_seqno = start_seqno
         self.end_seqno = end_seqno
         self.vb_uuid = vb_uuid
-        self.high_seqno = high_seqno
+        self.snap_start_seqno = snap_start_seqno
+        self.snap_end_seqno = snap_end_seqno
 
     def add_response(self, opcode, keylen, extlen, status, cas, body):
         if opcode == CMD_STREAM_REQ:
@@ -177,6 +179,7 @@ class StreamRequest(Operation):
 
                 seqno = struct.unpack(">II",body)
                 result['seqno'] = seqno[0]
+                result['rollback'] = seqno[1]
             else:
                 result['err_msg'] = body
 
@@ -221,17 +224,29 @@ class StreamRequest(Operation):
                                  'rev_seqno'  : rev_seqno,
                                  'key'        : key })
         elif opcode == CMD_SNAPSHOT_MARKER:
+
             logging.info("(Stream Request) Received snapshot marker")
+            assert len(body) == 20
+            snap_start, snap_end, flag =\
+                struct.unpack(">QQI", body)
+            assert flag in (0,1) , "Invalid snapshot flag: %s" % flag
+            assert snap_start <= snap_end, "Snapshot start: %s > end: %s" %\
+                                                (snap_start, snap_end)
+            flag = ('memory','disk')[flag]
             self.responses.put({ 'opcode'     : opcode,
-                                 'vbucket'    : status })
+                                 'vbucket'    : status,
+                                 'snap_start_seqno' : snap_start,
+                                 'snap_end_seqno'   : snap_end,
+                                 'flag'   : flag})
         else:
             logging.error("(Stream Request) Unknown response: %s" % opcode)
 
         return False
 
     def _get_extras(self):
-        return struct.pack(">IIQQQQ", self.flags, 0, self.start_seqno,
-                           self.end_seqno, self.vb_uuid, self.high_seqno)
+        return struct.pack(">IIQQQQQ", self.flags, 0, self.start_seqno,
+                           self.end_seqno, self.vb_uuid,
+                           self.snap_start_seqno, self.snap_end_seqno)
 
 ############################ Memcached Operations ############################
 

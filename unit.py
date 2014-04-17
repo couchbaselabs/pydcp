@@ -560,7 +560,7 @@ class UprTestCase(ParametrizedTestCase):
         op = self.upr_client.stream_req(0, 0,
                                         start_seqno,
                                         end_seqno,
-                                        vb_uuid, 0)
+                                        vb_uuid)
 
         while op.has_response():
             response = op.next_response(5)
@@ -587,7 +587,7 @@ class UprTestCase(ParametrizedTestCase):
             backfilled = False
 
             # send a stream request mutations from 1st snapshot
-            stream_op = self.upr_client.stream_req(0, 0, 0, end, vb_uuid, 0)
+            stream_op = self.upr_client.stream_req(0, 0, 0, end, vb_uuid)
             response = stream_op.next_response()
             assert response['status'] == SUCCESS
 
@@ -625,7 +625,7 @@ class UprTestCase(ParametrizedTestCase):
         backfilled = stream(4, vb_uuid)
         while not backfilled and tries > 0:
             tries -= 1
-            time.sleep(5)
+            time.sleep(2)
             backfilled = stream(4, vb_uuid)
 
         assert backfilled, "ERROR: no back filled items were streamed"
@@ -740,7 +740,7 @@ class UprTestCase(ParametrizedTestCase):
             assert response['status'] == SUCCESS
 
 
-        op = self.upr_client.stream_req(0, 0, 0, doc_count, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, doc_count, 0)
         last_by_seqno = 0
         while op.has_response():
 
@@ -774,7 +774,7 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        op = self.upr_client.stream_req(0, 0, 0, 1000, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, 1000, 0)
         response = op.next_response()
         assert response['opcode'] == CMD_STREAM_REQ
 
@@ -895,7 +895,7 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0)
         response = req_op.next_response()
         seqno = response['failover_log'][0][0]
         assert response['status'] == SUCCESS
@@ -917,7 +917,7 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        req_op = self.upr_client.stream_req(0, 0, 0, 100, 0)
         response = req_op.next_response()
         seqno = response['failover_log'][0][0]
         assert response['status'] == SUCCESS
@@ -1041,7 +1041,7 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        op = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0)
         response = op.next_response()
         assert response['status'] == ERR_ECLIENT
 
@@ -1079,7 +1079,7 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        op = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0)
         response = op.next_response()
         assert response['status'] == SUCCESS
 
@@ -1089,7 +1089,7 @@ class UprTestCase(ParametrizedTestCase):
         created = response['value']['eq_uprq:mystream:created']
         assert created >= 0
 
-        op = self.upr_client.stream_req(0, 0, 0, 100, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, 100, 0)
         response = op.next_response()
         assert response['status'] == ERR_KEY_EEXISTS
 
@@ -1108,16 +1108,13 @@ class UprTestCase(ParametrizedTestCase):
         op = self.mcd_client.stop_persistence()
         resp = op.next_response()
         assert resp['status'] == SUCCESS
+        doc_count = snap_end_seqno = 10
 
-        for i in range(10):
+        for i in range(doc_count):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
             resp = op.next_response()
             assert resp['status'] == SUCCESS
 
-        op = self.mcd_client.stats('vbucket-seqno')
-        resp = op.next_response()
-        assert resp['status'] == SUCCESS
-        end_seqno = int(resp['value']['vb_0:high_seqno'])
 
         op = self.upr_client.open_producer("mystream")
         response = op.next_response()
@@ -1125,7 +1122,7 @@ class UprTestCase(ParametrizedTestCase):
 
         mutations = 0
         last_by_seqno = 0
-        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, doc_count, 0, 0)
         while op.has_response():
             response = op.next_response()
             if response['opcode'] == 83:
@@ -1171,7 +1168,7 @@ class UprTestCase(ParametrizedTestCase):
         last_by_seqno = 0
         start_seqno = 7
         op = self.upr_client.stream_req(
-            0, 0, start_seqno, end_seqno, vb_uuid, high_seqno)
+            0, 0, start_seqno, end_seqno, vb_uuid, None)
         while op.has_response():
             response = op.next_response()
             if response['opcode'] == 83:
@@ -1216,7 +1213,7 @@ class UprTestCase(ParametrizedTestCase):
         mutations = 0
         deletions = 0
         last_by_seqno = 0
-        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0)
         while op.has_response():
             response = op.next_response()
             if response['opcode'] == 83:
@@ -1259,7 +1256,7 @@ class UprTestCase(ParametrizedTestCase):
         mutations = 0
         markers = 0
         last_by_seqno = 0
-        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, end_seqno, 0)
         while op.has_response():
             response = op.next_response()
             if response['opcode'] == 83:
@@ -1305,7 +1302,7 @@ class UprTestCase(ParametrizedTestCase):
         while not backfilling and tries > 0:
             # stream request until backfilling occurs
             self.upr_client.stream_req(0, 0, 0, 5,
-                                       vb_uuid, 0)
+                                       vb_uuid)
             stat = self.mcd_client.stats('upr').next_response()
             val = stat['value']
             num_backfilled =\
@@ -1317,7 +1314,7 @@ class UprTestCase(ParametrizedTestCase):
         assert backfilling, "ERROR: backfill task did not start"
 
         # attempt to stream deleted mutations
-        op = self.upr_client.stream_req(0, 0, 0, 2, vb_uuid, 0)
+        op = self.upr_client.stream_req(0, 0, 0, 2, vb_uuid)
         end_received = False
         while op.has_response():
             response = op.next_response(5)
@@ -1350,7 +1347,7 @@ class UprTestCase(ParametrizedTestCase):
         mutations = 0
         markers = 0
         last_by_seqno = 0
-        streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0, 0)
+        streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0)
         while streap_op.has_response() and mutations < 10:
             response = streap_op.next_response()
             if response['opcode'] == 83:
@@ -1396,7 +1393,7 @@ class UprTestCase(ParametrizedTestCase):
         mutations = 0
         markers = 0
         last_by_seqno = 0
-        streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0, 0)
+        streap_op = self.upr_client.stream_req(0, 0, 0, 20, 0)
         while streap_op.has_response() and mutations < 10:
             response = streap_op.next_response()
             if response['opcode'] == 83:
@@ -1447,7 +1444,7 @@ class UprTestCase(ParametrizedTestCase):
         streams = {}
         for vb in range(4):
             en = int(resp['value']['vb_%d:high_seqno' % vb])
-            op = self.upr_client.stream_req(vb, 0, 0, en, 0, 0)
+            op = self.upr_client.stream_req(vb, 0, 0, en, 0)
             streams[vb] = {'op' : op,
                            'mutations' : 0,
                            'last_seqno' : 0 }
@@ -1483,17 +1480,19 @@ class UprTestCase(ParametrizedTestCase):
         vb_stats = self.mcd_client.stats('vbucket-seqno').next_response()
         fl_stats = self.mcd_client.stats('failovers').next_response()
         fail_seqno = long(fl_stats['value'][vb_id+':0:seq'])
-        high_seqno = long(vb_stats['value'][vb_id+':high_seqno'])
         vb_uuid = long(vb_stats['value'][vb_id+':uuid'])
 
-        op = self.upr_client.stream_req(0, 0, 1, high_seqno, vb_uuid, high_seqno)
+        start_seqno = 1
+        end_seqno =  2
+        op = self.upr_client.stream_req(0, 0, start_seqno, end_seqno, vb_uuid, None)
         response = op.next_response()
+
         assert response['status'] == ERR_ROLLBACK
         assert response['seqno'] == fail_seqno
+        assert response['rollback'] == snap_start_seqno
 
-        start_seqno = response['seqno']
-        op = self.upr_client.stream_req(0, 0, start_seqno, high_seqno,
-                                        vb_uuid, high_seqno)
+        start_seqno = response['rollback']
+        op = self.upr_client.stream_req(0, 0, start_seqno, end_seqno, vb_uuid, None)
 
         last_by_seqno = 0
         while op.has_response():
@@ -1502,7 +1501,7 @@ class UprTestCase(ParametrizedTestCase):
             if response['opcode'] == CMD_MUTATION:
                 last_by_seqno = response['by_seqno']
 
-        assert last_by_seqno == high_seqno
+        assert last_by_seqno == end_seqno
 
     """
         Sends a stream request with start seqno greater than seqno of vbucket.  Expects
@@ -1521,7 +1520,7 @@ class UprTestCase(ParametrizedTestCase):
             self.mcd_client.set('key1', 'value', 0, 0, 0)
 
             by_seqno = n + 1
-            op = self.upr_client.stream_req(0, 0, by_seqno, by_seqno+1, vb_uuid, by_seqno + 1)
+            op = self.upr_client.stream_req(0, 0, by_seqno+1, by_seqno+2, vb_uuid, None)
             response = op.next_response()
             assert response['status'] == ERR_ROLLBACK
             assert response['seqno'] == 0
@@ -1545,9 +1544,8 @@ class UprTestCase(ParametrizedTestCase):
         for n in range(10):
             self.mcd_client.set('key', 'value', 0, 0, 0)
 
-            end_seqno = n  + 1
             for client in clients:
-                op = client.stream_req(0, 0, 0, end_seqno, 0, end_seqno)
+                op = client.stream_req(0, 0, 0, n, 0)
                 response = op.next_response()
                 assert response['status'] == SUCCESS
 
@@ -1559,10 +1557,8 @@ class UprTestCase(ParametrizedTestCase):
                     assert response is not None
                     assert response['opcode'] != ERR_ROLLBACK
                     if response['opcode'] == CMD_MUTATION:
+                        assert last_seen < response['by_seqno']
                         last_seen = response['by_seqno']
-
-                assert last_seen == end_seqno
-
 
     def test_stream_request_after_shutdown(self):
         """
@@ -1582,7 +1578,7 @@ class UprTestCase(ParametrizedTestCase):
 
 
         op = self.upr_client.stream_req(0, 0, 0, doc_count,
-                                        vb_uuid, 0)
+                                        vb_uuid)
         last_by_seqno = 0
         while op.has_response():
             response = op.next_response()
@@ -1596,7 +1592,7 @@ class UprTestCase(ParametrizedTestCase):
         self.upr_client = UprClient(self.host, self.port)
         self.upr_client.open_producer("mystream")
         op = self.upr_client.stream_req(0, 0, last_by_seqno, doc_count,
-                                        vb_uuid, 0)
+                                        vb_uuid, None)
         while op.has_response():
             response = op.next_response()
             if response['opcode'] == CMD_MUTATION:
@@ -1618,7 +1614,7 @@ class UprTestCase(ParametrizedTestCase):
         resp = op.next_response()
         vb_uuid = long(resp['value']['vb_0:0:id'])
 
-        notifier_stream = self.upr_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid, 0)
+        notifier_stream = self.upr_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid, None)
 
         for i in range(doc_count):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
@@ -1639,7 +1635,7 @@ class UprTestCase(ParametrizedTestCase):
 
         mutations = 0
         last_by_seqno = 0
-        op = self.upr_client.stream_req(0, 0, 0, doc_count, 0, 0)
+        op = self.upr_client.stream_req(0, 0, 0, doc_count, 0)
         while op.has_response():
             response = op.next_response()
             if response['opcode'] == 83:
@@ -1666,7 +1662,7 @@ class UprTestCase(ParametrizedTestCase):
         # create notifier stream with vb_uuid that doesn't exist
         # expect rollback since this value can never be reached
         vb_uuid = 0
-        notifier_stream = self.upr_client.stream_req(0, 0, 1, 0, 0, 0)
+        notifier_stream = self.upr_client.stream_req(0, 0, 1, 0, 0)
         response = notifier_stream.next_response()
         assert response['opcode'] == ERR_ROLLBACK,\
                 "ERROR: response expected = %s, received = %s" %\
@@ -1685,13 +1681,15 @@ class McdTestCase(ParametrizedTestCase):
         assert resp['status'] == SUCCESS
         assert resp['value']['curr_items'] == '0'
 
+    @unittest.skip("high_seqno to be replaced with snap_end_seqno")
     def test_stat_vbucket_seqno(self):
         """Tests the vbucket-seqno stat.
 
         Insert 10 documents and check if the sequence number has the
         correct value.
         """
-        for i in range(10):
+        doc_count = 10
+        for i in range(doc_count):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
             resp = op.next_response()
             assert resp['status'] == SUCCESS
@@ -1845,7 +1843,7 @@ class RebTestCase(ParametrizedTestCase):
             start_seqno = mutations
             mutations = mutations + 1
             last_by_seqno = 0
-            op = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid, high_seqno)
+            op = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid, None)
 
             while op.has_response():
                 response = op.next_response(10)
@@ -1894,7 +1892,7 @@ class RebTestCase(ParametrizedTestCase):
             op = self.upr_client.stream_req(0, 0,
                                             start_seqno,
                                             end_seqno,
-                                            vb_uuid, end_seqno)
+                                            vb_uuid, None)
             last_by_seqno = start_seqno
             while op.has_response():
                 response = op.next_response(timeout = 5)
@@ -2030,7 +2028,7 @@ class RebTestCase(ParametrizedTestCase):
 
         # stream 1st item
         self.mcd_client.set('key1', 'value', vb, 0, 0)
-        op = producer.stream_req(vb, 0, 0, 2, 0, 0)
+        op = producer.stream_req(vb, 0, 0, 2, 0)
         response = op.next_response(5)
         while response is not None:
             if 'key' in response:
@@ -2046,7 +2044,7 @@ class RebTestCase(ParametrizedTestCase):
         # update producer
         producer = UprClient(self.host, self.port)
         producer.open_producer("producerstream")
-        op = producer.stream_req(vb, 0, 0, 2, 0, 0)
+        op = producer.stream_req(vb, 0, 0, 2, 0)
 
         # stream both items after failover
         assert self.rest_client.rebalance([], [failover_node])
@@ -2120,7 +2118,7 @@ class RebTestCase(ParametrizedTestCase):
         # verify data can be streamed
         self.upr_client.open_producer("producerstream")
         for vb in replica_vbs:
-            op = self.upr_client.stream_req(vb, 0, 0, doc_count, 0, doc_count)
+            op = self.upr_client.stream_req(vb, 0, 0, doc_count, 0, 0, None)
             last_by_seqno = 0
             while op.has_response():
                 response = op.next_response(15)
@@ -2197,7 +2195,7 @@ class RebTestCase(ParametrizedTestCase):
 
             upr_client = UprClient(self.host, self.port)
             upr_client.open_producer("mystream")
-            op = upr_client.stream_req(vb, 0, 0, doc_count, 0, doc_count)
+            op = upr_client.stream_req(vb, 0, 0, doc_count, 0)
             last_by_seqno = 0
             while op.has_response():
                 response = op.next_response(15)

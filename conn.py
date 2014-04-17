@@ -83,8 +83,8 @@ class Connection(threading.Thread):
                 processed = False
                 for oper in self.ops:
                     if oper.opaque == opaque:
-                        logging.debug('%s:%s Process packet (magic %x)(opcode %x)(opaque %x)(status %x)'
-                                      % (self.host, self.port, magic, opcode, opaque, status))
+                        logging.debug('%s:%s Process packet (magic %x)(opcode %x)(opaque %x)(status %x)(bodylen %s)'
+                                      % (self.host, self.port, magic, opcode, opaque, status, len(body)))
                         rm = oper.add_response(opcode, keylen, extlen,
                                                status, cas, body)
                         if rm:

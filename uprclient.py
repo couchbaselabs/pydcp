@@ -48,8 +48,14 @@ class UprClient():
         self.conn.queue_operation(op)
         return op
 
-    def stream_req(self, vb, flags, start_seqno, end_seqno, vb_uuid, hi_seqno):
-        op = StreamRequest(vb, flags, start_seqno, end_seqno, vb_uuid, hi_seqno)
+    def stream_req(self, vb, flags = 0, start_seqno = 0, end_seqno = 0, vb_uuid = 0,
+                   snap_start_seqno = 0, snap_end_seqno = 0):
+        if snap_start_seqno is None:
+                # use None for snapstart to auto assign snap values to start_seqno
+                snap_start_seqno = snap_end_seqno = start_seqno
+
+        op = StreamRequest(vb, flags, start_seqno, end_seqno, vb_uuid,
+                           snap_start_seqno, snap_end_seqno)
         self.conn.queue_operation(op)
         return op
 
