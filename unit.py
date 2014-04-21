@@ -224,7 +224,7 @@ class UprTestCase(ParametrizedTestCase):
 
         assert c2_stats is not None
         assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'consumer'
-        assert c2_stats['value']['ep_upr_count'] == '2'
+        assert c2_stats['value']['ep_upr_count'] == '1'
 
         assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
            c2_stats['value']['eq_uprq:'+stream+':created']
@@ -258,7 +258,7 @@ class UprTestCase(ParametrizedTestCase):
             c2_stats = op.next_response()
 
         assert c2_stats['value']['eq_uprq:'+stream+':type'] == 'producer'
-        assert c2_stats['value']['ep_upr_count'] == '2'
+        assert c2_stats['value']['ep_upr_count'] == '1'
 
         assert c1_stats['value']['eq_uprq:'+stream+':created'] <\
            c2_stats['value']['eq_uprq:'+stream+':created']
@@ -339,7 +339,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
-        assert stats['value']['ep_upr_count'] == str(n * 2 + 1)
+        assert stats['value']['ep_upr_count'] == str(n * 2)
 
     def test_open_notifier(self):
         op = self.upr_client.open_notifier("notifier")
@@ -495,7 +495,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
-        assert stats['value']['ep_upr_count'] == str(n + 1)
+        assert stats['value']['ep_upr_count'] == str(n)
 
     """
         Open n consumer connection.  Add n streams to each consumer for unique vbucket
@@ -520,7 +520,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
-        assert stats['value']['ep_upr_count'] == str(n + 1)
+        assert stats['value']['ep_upr_count'] == str(n)
 
     """
         Open a single consumer and add stream for all active vbuckets with the
@@ -1751,7 +1751,7 @@ class RebTestCase(ParametrizedTestCase):
 
         # rebalance in
         for host in self.hosts[1:]:
-            print "rebalance in: %s" % host
+            logging.info("rebalance in: %s" % host)
             assert self.rest_client.rebalance([host], [])
             load(vbucket)
             assert self.rest_client.wait_for_rebalance(600)
@@ -1924,7 +1924,6 @@ class RebTestCase(ParametrizedTestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
-
         for host in self.hosts[1:]:
             assert self.rest_client.failover(host)
 
@@ -1937,8 +1936,8 @@ class RebTestCase(ParametrizedTestCase):
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
         upr_count = stats['value']['ep_upr_count']
-        assert int(upr_count) == 2,\
-                "Got upr_count = {0}, expected = {1}".format(upr_count, 2)
+        assert int(upr_count) == 1,\
+                "Got upr_count = {0}, expected = {1}".format(upr_count, 1)
 
         for vb in replica_vbs:
             key = 'eq_uprq:mystream:stream_%s_start_seqno' % vb
@@ -2032,7 +2031,6 @@ class RebTestCase(ParametrizedTestCase):
             last_by_seqno = 0
             while op.has_response():
                 response = op.next_response(15)
-                print response
                 if 'value' in response:
                     if response['opcode'] == CMD_MUTATION:
                         # failover after streaming half docs
