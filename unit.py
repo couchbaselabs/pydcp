@@ -1507,7 +1507,25 @@ class UprTestCase(ParametrizedTestCase):
 
         assert mutations == doc_count
 
+    def test_stream_request_notifier_bad_uuid(self):
+        """Wait for mutations from missing vb_uuid"""
 
+        op = self.upr_client.open_notifier("notifier")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        # set 1
+        resp = self.mcd_client.set('key', 'value', 0, 0, 0).next_response()
+        assert resp['status'] == SUCCESS
+
+        # create notifier stream with vb_uuid that doesn't exist
+        # expect rollback since this value can never be reached
+        vb_uuid = 0
+        notifier_stream = self.upr_client.stream_req(0, 0, 1, 0, 0, 0)
+        response = notifier_stream.next_response()
+        assert response['opcode'] == ERR_ROLLBACK,\
+                "ERROR: response expected = %s, received = %s" %\
+                    (ERR_ROLLBACK, response['opcode'])
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
