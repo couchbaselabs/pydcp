@@ -1464,19 +1464,26 @@ class UprTestCase(ParametrizedTestCase):
         to be streamed"""
 
 
+        doc_count = 100
         op = self.upr_client.open_notifier("notifier")
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        for i in range(100):
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+
+        notifier_stream = self.upr_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid, 0)
+
+        for i in range(doc_count):
             op = self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
             resp = op.next_response()
             assert resp['status'] == SUCCESS
 
-        op = self.upr_client.stream_req(0, 0, 0, 0, 0, 100)
-        response = op.next_response()
+
+        response = notifier_stream.next_response()
         assert response['opcode'] == CMD_STREAM_REQ
-        response = op.next_response()
+        response = notifier_stream.next_response()
         assert response['opcode'] == CMD_STREAM_END
 
 
@@ -1487,7 +1494,7 @@ class UprTestCase(ParametrizedTestCase):
 
         mutations = 0
         last_by_seqno = 0
-        op = self.upr_client.stream_req(0, 0, 0, 100, 0, 100)
+        op = self.upr_client.stream_req(0, 0, 0, doc_count, 0, 0)
         while op.has_response():
             response = op.next_response()
             if response['opcode'] == 83:
@@ -1498,7 +1505,7 @@ class UprTestCase(ParametrizedTestCase):
                 last_by_seqno = response['by_seqno']
                 mutations = mutations + 1
 
-        assert mutations == 100
+        assert mutations == doc_count
 
 
 
@@ -2004,7 +2011,7 @@ class RebTestCase(ParametrizedTestCase):
             assert orig_uuid != new_uuid
 
     def test_stream_request_failover_add_back(self):
-        """Failover node while streaming mutationas then add_back and fetch same stream""" 
+        """Failover node while streaming mutationas then add_back and fetch same stream"""
         # rebalance in nodeB
         nodeB = self.hosts[1]
         assert self.rest_client.rebalance([nodeB], [])
