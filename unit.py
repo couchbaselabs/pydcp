@@ -570,6 +570,65 @@ class UprTestCase(ParametrizedTestCase):
                             (end_seqno, response['by_seqno'])
 
 
+    def test_stream_request_dupe_backfilled_items(self):
+        """ request mutations across memory/backfill mutations"""
+        self.upr_client.open_producer("mystream")
+
+        def load(i):
+            """ load 3 and persist """
+            set_ops = [self.mcd_client.set('key%s'%i, 'value', 0, 0, 0)\
+                                                            for x in range(3)]
+            assert all(map(lambda status: status == SUCCESS,\
+                                [op.next_response()['status'] for op in set_ops]))
+            Stats.wait_for_persistence(self.mcd_client)
+
+        def stream(end, vb_uuid):
+            backfilled = False
+
+            # send a stream request mutations from 1st snapshot
+            stream_op = self.upr_client.stream_req(0, 0, 0, end, vb_uuid, 0)
+            response = stream_op.next_response()
+            assert response['status'] == SUCCESS
+
+            # check if items were backfilled before streaming
+            op = self.mcd_client.stats('upr')
+            response = op.next_response()
+            num_backfilled =\
+             int(response['value']['eq_uprq:mystream:stream_0_backfilled'])
+
+            if num_backfilled > 0:
+                backfilled = True
+
+            while stream_op.has_response():
+                response = stream_op.next_response(5)
+                assert response is not None,\
+                        "ERROR: producer stream received empty response"
+
+            self.upr_client.close_stream(0)
+            return backfilled
+
+        # get vb uuid
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+
+        # load stream snapshot 1
+        load('a')
+        stream(3, vb_uuid)
+
+        # load some more items
+        load('b')
+
+        # attempt to stream until request contains backfilled items
+        tries = 5
+        backfilled = stream(4, vb_uuid)
+        while not backfilled and tries > 0:
+            tries -= 1
+            time.sleep(5)
+            backfilled = stream(4, vb_uuid)
+
+        assert backfilled, "ERROR: no back filled items were streamed"
+
 
     """Close stream that has not been initialized.
     Expects client error."""
