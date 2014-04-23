@@ -539,6 +539,37 @@ class UprTestCase(ParametrizedTestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
+    def test_stream_request_deduped_items(self):
+        """ request a duplicate mutation """
+        op = self.upr_client.open_producer("mystream")
+
+        # get vb uuid
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+
+        self.mcd_client.set('snap1', 'value1', 0, 0, 0)
+        self.mcd_client.set('snap1', 'value2', 0, 0, 0)
+        self.mcd_client.set('snap1', 'value3', 0, 0, 0)
+        Stats.wait_for_persistence(self.mcd_client)
+
+        # attempt to request mutations 1 and 2
+        start_seqno = 1
+        end_seqno = 2
+        op = self.upr_client.stream_req(0, 0,
+                                        start_seqno,
+                                        end_seqno,
+                                        vb_uuid, 0)
+
+        while op.has_response():
+            response = op.next_response(5)
+            assert response is not None
+            if response['opcode'] == CMD_MUTATION:
+                assert response['by_seqno'] < end_seqno,\
+                        "ERROR: end_seqno=%s, received=%s" %\
+                            (end_seqno, response['by_seqno'])
+
+
 
     """Close stream that has not been initialized.
     Expects client error."""
