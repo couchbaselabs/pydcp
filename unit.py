@@ -1186,6 +1186,59 @@ class UprTestCase(ParametrizedTestCase):
         assert mutations == 15000
         assert markers > 1
 
+
+    def test_stream_request_backfill_deleted(self):
+        """ verify deleted mutations can be streamed after backfill
+            task has occured """
+
+        op = self.upr_client.open_producer("mystream")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+
+        # set 3 items and delete delete first 2
+        self.mcd_client.set('key1', 'value', 0, 0, 0)
+        self.mcd_client.set('key2', 'value', 0, 0, 0)
+        self.mcd_client.set('key3', 'value', 0, 0, 0)
+        Stats.wait_for_persistence(self.mcd_client)
+        self.mcd_client.delete('key1', 0)
+        self.mcd_client.delete('key2', 0)
+
+
+        backfilling = False
+        tries = 10
+        while not backfilling and tries > 0:
+            # stream request until backfilling occurs
+            self.upr_client.stream_req(0, 0, 0, 5,
+                                       vb_uuid, 0)
+            stat = self.mcd_client.stats('upr').next_response()
+            val = stat['value']
+            num_backfilled =\
+             int(val['eq_uprq:mystream:stream_0_backfilled'])
+            backfilling = num_backfilled > 0
+            tries -= 1
+            time.sleep(2)
+
+        assert backfilling, "ERROR: backfill task did not start"
+
+        # attempt to stream deleted mutations
+        op = self.upr_client.stream_req(0, 0, 0, 2, vb_uuid, 0)
+        end_received = False
+        while op.has_response():
+            response = op.next_response(5)
+            assert response is not None,\
+              "ERROR: did not receive response from stream_req"
+
+            if response['opcode'] == CMD_STREAM_END:
+                end_received = True
+
+        assert end_received,\
+                "ERROR: did not receive end of stream"
+
+
     """ Stream request with incremental mutations
 
     Insert some ops and then create a stream that wants to get more mutations
