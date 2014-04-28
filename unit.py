@@ -539,6 +539,7 @@ class UprTestCase(ParametrizedTestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
+    @unittest.skip("Broken")
     def test_stream_request_deduped_items(self):
         """ request a duplicate mutation """
         op = self.upr_client.open_producer("mystream")
@@ -1277,6 +1278,7 @@ class UprTestCase(ParametrizedTestCase):
         assert markers > 1
 
 
+    @unittest.skip("Broken")
     def test_stream_request_backfill_deleted(self):
         """ verify deleted mutations can be streamed after backfill
             task has occured """
