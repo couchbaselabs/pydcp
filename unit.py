@@ -547,7 +547,7 @@ class UprTestCase(ParametrizedTestCase):
         # get vb uuid
         op = self.mcd_client.stats('failovers')
         resp = op.next_response()
-        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+        vb_uuid = long(resp['value']['vb_0:0:id'])
 
         self.mcd_client.set('snap1', 'value1', 0, 0, 0)
         self.mcd_client.set('snap1', 'value2', 0, 0, 0)
@@ -611,7 +611,7 @@ class UprTestCase(ParametrizedTestCase):
         # get vb uuid
         op = self.mcd_client.stats('failovers')
         resp = op.next_response()
-        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+        vb_uuid = long(resp['value']['vb_0:0:id'])
 
         # load stream snapshot 1
         load('a')
@@ -865,7 +865,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('failovers')
         response = op.next_response()
-        assert response['value']['failovers:vb_0:0:seq'] == '0'
+        assert response['value']['vb_0:0:seq'] == '0'
 
     """Request failover log from invalid vbucket
 
@@ -1164,8 +1164,8 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('failovers')
         resp = op.next_response()
-        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
-        high_seqno = long(resp['value']['failovers:vb_0:0:seq'])
+        vb_uuid = long(resp['value']['vb_0:0:id'])
+        high_seqno = long(resp['value']['vb_0:0:seq'])
 
         mutations = 0
         last_by_seqno = 0
@@ -1289,7 +1289,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('failovers')
         resp = op.next_response()
-        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+        vb_uuid = long(resp['value']['vb_0:0:id'])
 
         # set 3 items and delete delete first 2
         self.mcd_client.set('key1', 'value', 0, 0, 0)
@@ -1482,7 +1482,7 @@ class UprTestCase(ParametrizedTestCase):
         vb_id = 'vb_0'
         vb_stats = self.mcd_client.stats('vbucket-seqno').next_response()
         fl_stats = self.mcd_client.stats('failovers').next_response()
-        fail_seqno = long(fl_stats['value']['failovers:'+vb_id+':0:seq'])
+        fail_seqno = long(fl_stats['value'][vb_id+':0:seq'])
         high_seqno = long(vb_stats['value'][vb_id+':high_seqno'])
         vb_uuid = long(vb_stats['value'][vb_id+':uuid'])
 
@@ -1578,7 +1578,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('failovers')
         resp = op.next_response()
-        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+        vb_uuid = long(resp['value']['vb_0:0:id'])
 
 
         op = self.upr_client.stream_req(0, 0, 0, doc_count,
@@ -1616,7 +1616,7 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.mcd_client.stats('failovers')
         resp = op.next_response()
-        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
+        vb_uuid = long(resp['value']['vb_0:0:id'])
 
         notifier_stream = self.upr_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid, 0)
 
@@ -1827,8 +1827,8 @@ class RebTestCase(ParametrizedTestCase):
         doc_count = 100
         op = self.mcd_client.stats('failovers')
         resp = op.next_response()
-        vb_uuid = long(resp['value']['failovers:vb_0:0:id'])
-        high_seqno = long(resp['value']['failovers:vb_0:0:seq'])
+        vb_uuid = long(resp['value']['vb_0:0:id'])
+        high_seqno = long(resp['value']['vb_0:0:seq'])
 
         for i in range(doc_count):
 
@@ -1887,7 +1887,7 @@ class RebTestCase(ParametrizedTestCase):
             fl_stats = self.mcd_client.stats('failovers').next_response()
 
             vb_id = 'vb_%s' % vbucket
-            start_seqno = long(fl_stats['value']['failovers:'+vb_id+':0:seq'])
+            start_seqno = long(fl_stats['value'][vb_id+':0:seq'])
             end_seqno = long(vb_stats['value'][vb_id+':high_seqno'])
             vb_uuid = long(vb_stats['value'][vb_id+':uuid'])
 
@@ -2168,9 +2168,9 @@ class RebTestCase(ParametrizedTestCase):
         # verify replica vbuckets have updated uuids
         # and old uuid matches uuids from original table
         for vb in replica_vbs:
-            orig_uuid = long(fl_table1['value']['failovers:vb_'+str(vb)+':0:id'])
-            assert orig_uuid == long(fl_table2['value']['failovers:vb_'+str(vb)+':1:id'])
-            new_uuid = long(fl_table2['value']['failovers:vb_'+str(vb)+':0:id'])
+            orig_uuid = long(fl_table1['value']['vb_'+str(vb)+':0:id'])
+            assert orig_uuid == long(fl_table2['value']['vb_'+str(vb)+':1:id'])
+            new_uuid = long(fl_table2['value']['vb_'+str(vb)+':0:id'])
             assert orig_uuid != new_uuid
 
     def test_stream_request_failover_add_back(self):
