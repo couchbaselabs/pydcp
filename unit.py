@@ -1664,7 +1664,7 @@ class UprTestCase(ParametrizedTestCase):
         vb_uuid = 0
         notifier_stream = self.upr_client.stream_req(0, 0, 1, 0, 0)
         response = notifier_stream.next_response()
-        assert response['opcode'] == ERR_ROLLBACK,\
+        assert response['status'] == ERR_ROLLBACK,\
                 "ERROR: response expected = %s, received = %s" %\
                     (ERR_ROLLBACK, response['opcode'])
 
