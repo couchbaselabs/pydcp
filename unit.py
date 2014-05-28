@@ -1481,18 +1481,18 @@ class UprTestCase(ParametrizedTestCase):
         fl_stats = self.mcd_client.stats('failovers').next_response()
         fail_seqno = long(fl_stats['value'][vb_id+':0:seq'])
         vb_uuid = long(vb_stats['value'][vb_id+':uuid'])
+        rollback = long(vb_stats['value'][vb_id+':high_seqno'])
 
-        start_seqno = 1
-        end_seqno =  2
+        start_seqno = end_seqno =  3
         op = self.upr_client.stream_req(0, 0, start_seqno, end_seqno, vb_uuid, None)
         response = op.next_response()
 
         assert response['status'] == ERR_ROLLBACK
         assert response['seqno'] == fail_seqno
-        assert response['rollback'] == snap_start_seqno
+        assert response['rollback'] == rollback
 
-        start_seqno = response['rollback']
-        op = self.upr_client.stream_req(0, 0, start_seqno, end_seqno, vb_uuid, None)
+        start_seqno = end_seqno = rollback
+        op = self.upr_client.stream_req(0, 0, start_seqno - 1, end_seqno, vb_uuid, None)
 
         last_by_seqno = 0
         while op.has_response():
