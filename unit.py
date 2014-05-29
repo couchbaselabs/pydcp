@@ -631,6 +631,36 @@ class UprTestCase(ParametrizedTestCase):
         assert backfilled, "ERROR: no back filled items were streamed"
 
 
+    def test_backfill_from_default_vb_uuid(self):
+        """ attempt a backfill stream request using vb_uuid = 0 """
+        def disk_stream():
+            op = self.upr_client.stream_req(0, 0, 0, 1, 0)
+            last_by_seqno = 0
+            persisted = False
+            while op.has_response():
+                response = op.next_response(5)
+                assert response is not None, "did not receive mutations"
+
+                if response['opcode'] == CMD_SNAPSHOT_MARKER:
+                    if response['flag'] == 'disk':
+                        persisted = True
+
+                if response['opcode'] == CMD_MUTATION:
+                    last_by_seqno = response['by_seqno']
+
+            assert last_by_seqno == 1
+            return persisted
+
+        self.upr_client.open_producer("mystream")
+        self.mcd_client.set('key', 'value', 0, 0, 0)
+
+        tries = 20
+        while tries > 0 and not disk_stream():
+            tries -= 1
+            time.sleep(1)
+
+        assert tries > 0, "Items never persisted to disk"
+
     """Close stream that has not been initialized.
     Expects client error."""
     def test_close_stream_command(self):
