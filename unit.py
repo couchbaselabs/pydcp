@@ -2076,7 +2076,9 @@ class RebTestCase(ParametrizedTestCase):
         assert len(active_vbs) > 0, 'No active vbuckets on node'
         assert len(replica_vbs) > 0, 'No replica vbuckets on node'
 
+
         # load data into replica of node1 by loading into node2 active vbuckets
+        orig_host, orig_port = self.host, self.port
         doc_count = 10
         for vb in replica_vbs:
             self.mcd_reset(vb)
@@ -2092,21 +2094,24 @@ class RebTestCase(ParametrizedTestCase):
             response = op.next_response()
             assert response['status'] == SUCCESS
 
-        for host in self.hosts[1:]:
+        for host in self.hosts[2:]:
             assert self.rest_client.failover(host)
 
-        assert self.rest_client.rebalance([], self.hosts[1:])
+        assert self.rest_client.rebalance([], self.hosts[2:])
         assert self.rest_client.wait_for_rebalance(600)
 
 
-        # check consumer persisted and high_seqno are correct
-        time.sleep(2)
+        # check if original consumers still exist
+        self.mcd_client = McdClient(orig_host, orig_port)
+        active_vbs = self.all_vbucket_ids('active')
+        replica_vbs = self.all_vbucket_ids('replica')
         op = self.mcd_client.stats('upr')
         stats = op.next_response()
         upr_count = stats['value']['ep_upr_count']
-        assert int(upr_count) == 1,\
-                "Got upr_count = {0}, expected = {1}".format(upr_count, 1)
+        assert int(upr_count) == len(replica_vbs),\
+                "Got upr_count = {0}, expected = {1}".format(upr_count, len(replica_vbs))
 
+        # check consumer persisted and high_seqno are correct
         for vb in replica_vbs:
             key = 'eq_uprq:mystream:stream_%s_start_seqno' % vb
             assert key in stats['value'], "Stream %s missing from stats" % vb
