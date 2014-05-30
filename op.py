@@ -391,3 +391,21 @@ class Noop(Operation):
 
     def _get_extras(self):
         return ''
+
+
+class Ack(Operation):
+    def __init__(self, nbytes):
+
+        self.nbytes = nbytes
+        value = struct.pack(">L", self.nbytes)
+        Operation.__init__(self, CMD_ACK, 0, 0, 0, '', value)
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        self.responses.put({ 'opcode': opcode,
+                             'body' : body,
+                             'status': status })
+        return True
+
+    def _get_extras(self):
+        return ''
+

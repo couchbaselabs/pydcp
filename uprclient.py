@@ -66,3 +66,8 @@ class UprClient():
         op = Noop()
         self.conn.queue_operation(op)
         return op
+
+    def ack(self, nbytes):
+        op = Ack(nbytes)
+        self.conn.queue_operation(op)
+        return op
