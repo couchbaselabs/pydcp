@@ -1698,6 +1698,198 @@ class UprTestCase(ParametrizedTestCase):
                 "ERROR: response expected = %s, received = %s" %\
                     (ERR_ROLLBACK, response['opcode'])
 
+    def test_flow_control(self):
+        """ verify flow control of a 64 byte buffer stream """
+
+        op = self.upr_client.open_producer("flowctl")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+
+        op = self.upr_client.flow_control(64)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        for i in range(1024):
+                self.mcd_client.set('key'+str(i), 'value', 0, 0, 0)
+
+        op = self.upr_client.stream_req(0, 0, 0, 20, 0)
+        last_by_seqno = 0
+        while op.has_response():
+                resp = op.next_response(1)
+                if resp is None:
+                    ack = self.upr_client.ack(64)
+                    response = ack.next_response()
+                    assert response['status'] == SUCCESS
+                elif resp['opcode'] == 87:
+                    assert resp['by_seqno'] > last_by_seqno
+                    last_by_seqno = resp['by_seqno']
+
+        assert last_by_seqno == 20
+
+    def test_flow_control_stats(self):
+        """ verify flow control stats """
+
+        buffsize = 24
+        self.upr_client.open_producer("flowctl")
+        self.upr_client.flow_control(buffsize)
+        self.mcd_client.set('key1', 'valuevaluevalue', 0, 0, 0)
+        self.mcd_client.set('key2', 'valuevaluevalue', 0, 0, 0)
+        self.mcd_client.set('key3', 'valuevaluevalue', 0, 0, 0)
+
+        def info():
+            time.sleep(2)
+            op = self.mcd_client.stats('upr')
+            stats = op.next_response()
+            assert stats['status'] == SUCCESS
+            acked = stats['value']['eq_uprq:flowctl:total_acked_bytes']
+            unacked = stats['value']['eq_uprq:flowctl:total_unacked_bytes']
+            sent = stats['value']['eq_uprq:flowctl:total_bytes_sent']
+
+            return int(acked), int(sent), int(unacked)
+
+        # all stats 0
+        assert all(map(lambda x: x==0, info()))
+
+        op = self.upr_client.stream_req(0, 0, 0, 3, 0)
+        acked, sent, unacked = info()
+        assert acked == 0
+        assert unacked == sent
+
+        # ack received bytes
+        last_acked = acked
+        while unacked > 0:
+            ack = self.upr_client.ack(buffsize)
+            acked, sent, unacked = info()
+            assert acked == last_acked + buffsize
+            last_acked = acked
+
+        last_mutation = None
+        while op.has_response():
+            resp = op.next_response(2)
+            assert resp is not None
+            if resp['opcode'] == CMD_MUTATION:
+                last_mutation = resp
+
+        assert last_mutation is not None
+        assert last_mutation['by_seqno'] == 3
+
+    def test_flow_control_stream_closed(self):
+        """ close and reopen stream during with flow controlled client"""
+
+        op = self.upr_client.open_producer("flowctl")
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        buffsize = 64
+        op = self.upr_client.flow_control(buffsize)
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+
+        end_seqno = 5
+        for i in range(end_seqno):
+                self.mcd_client.set('key'+str(i), 'value', 0, 0, 0)
+
+
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['vb_0:0:id'])
+
+        op = self.mcd_client.stats('upr')
+        stats = op.next_response()
+        key = 'eq_uprq:flowctl:max_buffer_bytes'
+        print int(stats['value'][key])
+        time.sleep(20)
+
+
+        assert False
+
+        op = self.upr_client.stream_req(0, 0, 0, end_seqno, vb_uuid)
+        time.sleep(5)
+        last_by_seqno = 0
+        max_timeouts =  10
+
+
+
+        while op.has_response() and max_timeouts > 0:
+                resp = op.next_response(2)
+
+                if resp is None:
+
+                    # close
+                    self.upr_client.close_stream(0)
+
+                    # ack
+                    ack = self.upr_client.ack(64)
+                    response = ack.next_response()
+                    assert response['status'] == SUCCESS,\
+                            "Ack rejected"
+
+                    # new stream
+                    op = self.upr_client.stream_req(0, 0, last_by_seqno,
+                                                       end_seqno, vb_uuid, None)
+                    response = op.next_response()
+                    assert response['status'] == SUCCESS,\
+                            "Re-open Stream failed"
+
+                    max_timeouts -= 1
+
+                elif resp['opcode'] == 87:
+                    assert resp['by_seqno'] > last_by_seqno
+                    last_by_seqno = resp['by_seqno']
+
+        # verify stream closed
+        assert last_by_seqno == end_seqno, "Got %s" % last_by_seqno
+
+
+    def test_flow_control_reset_producer(self):
+        """ recreate producer with various values max_buffer bytes """
+        sizes = [64, 29, 64, 777, 32, 128, 16, 24, 29, 64]
+
+        for buffsize in sizes:
+
+            op = self.upr_client.open_producer("flowctl")
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+            op = self.upr_client.flow_control(buffsize)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+
+            op = self.mcd_client.stats('upr')
+            stats = op.next_response()
+            key = 'eq_uprq:flowctl:max_buffer_bytes'
+            conn_bsize = int(stats['value'][key])
+            assert  conn_bsize == buffsize,\
+                '%s != %s' % (conn_bsize, buffsize)
+
+
+    def test_flow_control_set_buffer_bytes_per_producer(self):
+        """ use various buffer sizes between producer connections """
+
+        def max_buffer_bytes(connection):
+            op = self.mcd_client.stats('upr')
+            stats = op.next_response()
+            key = 'eq_uprq:%s:max_buffer_bytes' % connection
+            return int(stats['value'][key])
+
+        def verify(connection, buffsize):
+            op = self.upr_client.open_producer(connection)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+            op = self.upr_client.flow_control(buffsize)
+            response = op.next_response()
+            assert response['status'] == SUCCESS
+            producer_bsize = max_buffer_bytes(connection)
+            assert producer_bsize == buffsize,\
+                "%s != %s" % (producer_bsize, buffsize)
+
+        producers = [("flowctl1", 64), ("flowctl2", 29), ("flowctl3", 128)]
+
+        for producer in producers:
+            connection, buffsize = producer
+            verify(connection, buffsize)
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
