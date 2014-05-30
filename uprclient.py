@@ -71,3 +71,8 @@ class UprClient():
         op = Ack(nbytes)
         self.conn.queue_operation(op)
         return op
+
+    def flow_control(self, buffer_size):
+        op = FlowControl(buffer_size)
+        self.conn.queue_operation(op)
+        return op

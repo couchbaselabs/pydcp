@@ -409,3 +409,20 @@ class Ack(Operation):
     def _get_extras(self):
         return ''
 
+class FlowControl(Operation):
+    def __init__(self, buffer_size):
+
+        key = "connection_buffer_size"
+        value = str(buffer_size)
+        Operation.__init__(self, CMD_FLOW_CONTROL, 0, 0, 0, key, value)
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        self.responses.put({ 'opcode': opcode,
+                             'body' : body,
+                             'status': status })
+        return True
+
+    def _get_extras(self):
+        return ''
+
+

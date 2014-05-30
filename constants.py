@@ -23,6 +23,7 @@ CMD_FLUSH            = 0x5a
 CMD_SET_VB_STATE     = 0x5b
 CMD_NOOP             = 0x5c
 CMD_ACK              = 0x5d
+CMD_FLOW_CONTROL     = 0x5e
 
 # Memcached command opcodes
 
