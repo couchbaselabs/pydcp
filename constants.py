@@ -21,6 +21,7 @@ CMD_DELETION         = 0x58
 CMD_EXPIRATION       = 0x59
 CMD_FLUSH            = 0x5a
 CMD_SET_VB_STATE     = 0x5b
+CMD_NOOP             = 0x5c
 
 # Memcached command opcodes
 

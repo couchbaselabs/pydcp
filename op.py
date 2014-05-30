@@ -378,3 +378,16 @@ class StartPersistence(Operation):
 
     def _get_extras(self):
         return ''
+
+class Noop(Operation):
+
+    def __init__(self):
+        Operation.__init__(self, CMD_NOOP, 0, 0, 0, '', '')
+
+    def add_response(self, opcode, keylen, extlen, status, cas, body):
+        self.responses.put({ 'opcode': opcode,
+                             'status': status })
+        return True
+
+    def _get_extras(self):
+        return ''

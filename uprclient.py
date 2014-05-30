@@ -62,3 +62,7 @@ class UprClient():
     def shutdown(self):
         self.conn.close()
 
+    def noop(self):
+        op = Noop()
+        self.conn.queue_operation(op)
+        return op
