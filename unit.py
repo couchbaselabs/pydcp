@@ -1879,6 +1879,42 @@ class UprTestCase(ParametrizedTestCase):
             connection, buffsize = producer
             verify(connection, buffsize)
 
+    def test_flow_control_notifier_stream(self):
+        """ verifies flow control still works with notifier streams """
+        mutations = 100
+
+        # create notifier
+        op = self.upr_client.open_notifier('flowctl')
+        response = op.next_response()
+        assert response['status'] == SUCCESS
+        self.upr_client.flow_control(16)
+
+        # vb uuid
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['vb_0:0:id'])
+
+        # set to notify when seqno endseqno reached
+        notifier_stream = self.upr_client.stream_req(0, 0, mutations + 1, 0,  vb_uuid)
+
+        # persist mutations
+        for i in range(mutations):
+            self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+        Stats.wait_for_persistence(self.mcd_client)
+
+        tries = 10
+        while tries > 0:
+            resp = notifier_stream.next_response(1)
+            if resp is None:
+                self.mcd_client.set('key' + str(i), 'value', 0, 0, 0)
+            else:
+                if resp['opcode'] == CMD_STREAM_END:
+                    break
+            tries -= 1
+
+        assert tries > 0, 'notifier never received end stream'
+
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
