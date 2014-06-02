@@ -1914,6 +1914,46 @@ class UprTestCase(ParametrizedTestCase):
 
         assert tries > 0, 'notifier never received end stream'
 
+    def test_flow_control_ack_n_vbuckets(self):
+
+        self.upr_client.open_producer("flowctl")
+        self.upr_client.flow_control(128)
+
+        mutations = 1000
+        num_vbs = len(self.all_vbucket_ids())
+
+        for vb in range(num_vbs):
+            for i in xrange(mutations):
+                self.mcd_client.set('key' + str(i), 'value', vb, 0, 0)
+
+        # request mutations
+        op = self.mcd_client.stats('failovers')
+        resp = op.next_response()
+        vb_uuid = long(resp['value']['vb_0:0:id'])
+        for vb in range(num_vbs):
+            self.upr_client.stream_req(vb, 0, 0, mutations, vb_uuid)
+
+
+        # ack until all mutations sent
+        done = 0
+        start_t = time.time()
+        while done != num_vbs:
+
+            done = 0
+            ack = self.upr_client.ack(128)
+
+            op = self.mcd_client.stats('upr')
+            stats = op.next_response()
+            assert stats['status'] == SUCCESS
+
+            for vb in range(num_vbs):
+                key = 'eq_uprq:flowctl:stream_%s_last_sent_seqno'%vb
+                seqno = int(stats['value'][key])
+                if seqno == mutations:
+                    done += 1
+
+            assert time.time() - start_t < 500,\
+                "timed out waiting for seqno on all vbuckets"
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
