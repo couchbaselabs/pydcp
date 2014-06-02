@@ -1781,7 +1781,7 @@ class UprTestCase(ParametrizedTestCase):
         response = op.next_response()
         assert response['status'] == SUCCESS
 
-        buffsize = 64
+        buffsize = 128
         op = self.upr_client.flow_control(buffsize)
         response = op.next_response()
         assert response['status'] == SUCCESS
@@ -1795,21 +1795,10 @@ class UprTestCase(ParametrizedTestCase):
         resp = op.next_response()
         vb_uuid = long(resp['value']['vb_0:0:id'])
 
-        op = self.mcd_client.stats('upr')
-        stats = op.next_response()
-        key = 'eq_uprq:flowctl:max_buffer_bytes'
-        print int(stats['value'][key])
-        time.sleep(20)
-
-
-        assert False
-
         op = self.upr_client.stream_req(0, 0, 0, end_seqno, vb_uuid)
         time.sleep(5)
         last_by_seqno = 0
         max_timeouts =  10
-
-
 
         while op.has_response() and max_timeouts > 0:
                 resp = op.next_response(2)
