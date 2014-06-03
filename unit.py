@@ -1715,17 +1715,20 @@ class UprTestCase(ParametrizedTestCase):
 
         op = self.upr_client.stream_req(0, 0, 0, 20, 0)
         last_by_seqno = 0
+        required_ack = False
         while op.has_response():
                 resp = op.next_response(1)
                 if resp is None:
                     ack = self.upr_client.ack(64)
                     response = ack.next_response()
                     assert response['status'] == SUCCESS
+                    required_ack = True
                 elif resp['opcode'] == 87:
                     assert resp['by_seqno'] > last_by_seqno
                     last_by_seqno = resp['by_seqno']
 
         assert last_by_seqno == 20
+        assert required_ack, "received non flow-controlled stream"
 
     def test_flow_control_stats(self):
         """ verify flow control stats """
@@ -1799,6 +1802,7 @@ class UprTestCase(ParametrizedTestCase):
         time.sleep(5)
         last_by_seqno = 0
         max_timeouts =  10
+        required_ack = False
 
         while op.has_response() and max_timeouts > 0:
                 resp = op.next_response(2)
@@ -1813,6 +1817,7 @@ class UprTestCase(ParametrizedTestCase):
                     response = ack.next_response()
                     assert response['status'] == SUCCESS,\
                             "Ack rejected"
+                    required_ack = True
 
                     # new stream
                     op = self.upr_client.stream_req(0, 0, last_by_seqno,
@@ -1829,6 +1834,7 @@ class UprTestCase(ParametrizedTestCase):
 
         # verify stream closed
         assert last_by_seqno == end_seqno, "Got %s" % last_by_seqno
+        assert required_ack, "received non flow-controlled stream"
 
 
     def test_flow_control_reset_producer(self):
