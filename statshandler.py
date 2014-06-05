@@ -2,15 +2,13 @@
 import time
 
 from constants import *
-from mcdclient import McdClient
+from lib.mc_bin_client import MemcachedClient as McdClient
 
 class Stats():
     @staticmethod
     def get_stat(client, stat, type=''):
-        op = client.stats(type)
-        response = op.next_response()
-        assert response['status'] == SUCCESS
-        return response['value'][stat]
+        response = client.stats(type)
+        return response[stat]
 
     @staticmethod
     def check(client, stat, exp, type=''):
@@ -36,10 +34,9 @@ class Stats():
     @staticmethod
     def wait_for_stat(client, stat, val, type=''):
         for i in range(60):
-            op = client.stats(type)
-            resp = op.next_response()
-            assert resp['status'] == SUCCESS
-            if resp['value'][stat] == str(val):
+            resp = client.stats(type)
+            assert stat in resp
+            if resp[stat] == str(val):
                 return True
             time.sleep(1)
         return False
@@ -48,9 +45,10 @@ class Stats():
     def wait_for_warmup(host, port):
         while True:
             client = McdClient(host, port)
-            op = client.stats()
-            response = op.next_response()
-            if response['status'] == SUCCESS:
-                if response['value']['ep_degraded_mode'] == '0':
+            try:
+                response = client.stats()
+                if response['ep_degraded_mode'] == '0':
                     break
+            except:
+                pass
             time.sleep(1)
