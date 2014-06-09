@@ -1746,7 +1746,7 @@ class UprTestCase(ParametrizedTestCase):
             stats = op.next_response()
             assert stats['status'] == SUCCESS
             acked = stats['value']['eq_uprq:flowctl:total_acked_bytes']
-            unacked = stats['value']['eq_uprq:flowctl:total_unacked_bytes']
+            unacked = stats['value']['eq_uprq:flowctl:unacked_bytes']
             sent = stats['value']['eq_uprq:flowctl:total_bytes_sent']
 
             return int(acked), int(sent), int(unacked)
