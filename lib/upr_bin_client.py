@@ -28,29 +28,35 @@ class UprClient(MemcachedClient):
 
     def _restart_reader(self):
         """ restart reader thread """
-        self.reconnect()
         self.conn = UprClient.Reader(self)
         self.conn.start()
 
+
+    def _open(self, op):
+
+        if not self.conn.isAlive():
+            self.reconnect()
+            self._restart_reader()
+
+        return self._handle_op(op)
 
     def open_consumer(self, name):
         """ opens an upr consumer connection """
 
         op = OpenConsumer(name)
-        return self._handle_op(op)
+        return self._open(op)
 
     def open_producer(self, name):
         """ opens an upr producer connection """
 
         op = OpenProducer(name)
-        return self._handle_op(op)
+        return self._open(op)
 
     def open_notifier(self, name):
         """ opens an upr notifier connection """
 
         op = OpenNotifier(name)
-
-        return self._handle_op(op)
+        return self._open(op)
 
     def get_failover_log(self, vbucket):
         """ get upr failover log """
@@ -176,7 +182,6 @@ class UprClient(MemcachedClient):
         def __init__(self, client):
             threading.Thread.__init__(self)
             self.client = client
-            self.max_timeouts = 5
 
         def run(self):
 
@@ -197,14 +202,7 @@ class UprClient(MemcachedClient):
                         self.ack_stream_req(opaque)
 
                 except Exception as ex:
-                    if 'Timeout waiting' in str(ex):
-                        if self.max_timeouts == 0:
-                            return
-                        else:
-                            self.max_timeouts -= 1
-                            pass # ignore timeout read
-                    else:
-                        return # bad fds or client error
+                    break
 
         def ack_stream_req(self, opaque):
             body   = struct.pack("<QQ", 123456, 0)
