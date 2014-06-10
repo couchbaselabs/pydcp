@@ -273,6 +273,12 @@ class UprStream(object):
         return msg
 
     def run(self, end=None):
+        """ return the responses from the stream up to seqno = end
+
+            Note: all this data has already been sent over the wire
+            and this method is merely reading what's been received
+            off the queue. """
+
         mutations = []
         while self.has_response():
             response = self.next_response()
