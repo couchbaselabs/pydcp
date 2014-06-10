@@ -444,6 +444,35 @@ class UprTestCase(ParametrizedTestCase):
             response = self.upr_client.add_stream(i, 1)
             assert response['status'] == SUCCESS
 
+    def test_add_stream_various_ops(self):
+        """ verify consumer can receive mutations created by various mcd ops """
+
+        response = self.upr_client.open_consumer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.set('key', 0, 0, val, 0)
+
+        for i in range(100):
+            # append + prepend
+            self.mcd_client.append('key',str(i), 0, 0)
+            val += str(i)
+            self.mcd_client.prepend('key',str(i), 0, 0)
+            val = str(i) + val
+
+
+        self.mcd_client.incr('key2', init = 0, vbucket = 0)
+        for i in range(100):
+            self.mcd_client.incr('key2', amt = 2, vbucket = 0)
+        for i in range(100):
+            self.mcd_client.decr('key2', amt = 2, vbucket = 0)
+
+        response = self.upr_client.add_stream(0, 0)
+        assert response['status'] == SUCCESS
+        stats = self.mcd_client.stats('upr')
+        mutations =stats['eq_uprq:mystream:stream_0_start_seqno']
+        assert mutations == '402'
+
     def test_stream_request_deduped_items(self):
         """ request a duplicate mutation """
         response = self.upr_client.open_producer("mystream")
@@ -1366,6 +1395,134 @@ class UprTestCase(ParametrizedTestCase):
         assert stream.status == ERR_ROLLBACK,\
                 "ERROR: response expected = %s, received = %s" %\
                     (ERR_ROLLBACK, stream.status)
+
+    def test_stream_request_append(self):
+        """ stream appended mutations """
+        response = self.upr_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.set('key', 0, 0, val, 0)
+
+        for i in range(100):
+            self.mcd_client.append('key',str(i), 0, 0)
+            val += str(i)
+
+        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        assert stream.status == SUCCESS
+
+        responses = stream.run()
+        assert stream.last_by_seqno == 101
+        assert responses[1]['value'] == val
+
+    def test_stream_request_prepend(self):
+        """ stream prepended mutations """
+        response = self.upr_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.set('key', 0, 0, val, 0)
+
+        for i in range(100):
+            self.mcd_client.prepend('key',str(i), 0, 0)
+            val = str(i) + val
+
+        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        assert stream.status == SUCCESS
+
+        responses = stream.run()
+        assert stream.last_by_seqno == 101
+        assert responses[1]['value'] == val
+
+    def test_stream_request_incr(self):
+        """ stream mutations created by incr command """
+        response = self.upr_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.incr('key', init = 0, vbucket = 0)
+
+        for i in range(100):
+            self.mcd_client.incr('key', amt = 2, vbucket = 0)
+
+        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        assert stream.status == SUCCESS
+
+        responses = stream.run()
+        assert stream.last_by_seqno == 101
+        assert responses[1]['value'] == '200'
+
+
+    def test_stream_request_decr(self):
+        """ stream mutations created by decr command """
+        response = self.upr_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.decr('key', init = 200, vbucket = 0)
+
+        for i in range(100):
+            self.mcd_client.decr('key', amt = 2, vbucket = 0)
+
+        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        assert stream.status == SUCCESS
+
+        responses = stream.run()
+        assert stream.last_by_seqno == 101
+        assert responses[1]['value'] == '0'
+
+    def test_stream_request_replace(self):
+        """ stream mutations created by replace command """
+        response = self.upr_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.set('key', 0, 0, 'value', 0)
+
+        for i in range(100):
+            self.mcd_client.replace('key', 0, 0, 'value'+str(i), 0)
+
+        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        assert stream.status == SUCCESS
+
+        responses = stream.run()
+        assert stream.last_by_seqno == 101
+        assert responses[1]['value'] == 'value99'
+
+
+    def test_stream_request_touch(self):
+        """ stream mutations created by touch command """
+
+        response = self.upr_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.set('key', 100, 0, 'value', 0)
+        self.mcd_client.touch('key', 1, 0)
+
+        stream = self.upr_client.stream_req(0, 0, 0, 2, 0)
+        assert stream.status == SUCCESS
+
+        responses = stream.run()
+        assert stream.last_by_seqno == 2
+        assert int(responses[1]['expiration']) > 0
+
+    def test_stream_request_gat(self):
+        """ stream mutations created by get-and-touch command """
+
+        response = self.upr_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        val = 'base-'
+        self.mcd_client.set('key', 100, 0, 'value', 0)
+        self.mcd_client.gat('key', 1, 0)
+
+        stream = self.upr_client.stream_req(0, 0, 0, 2, 0)
+        assert stream.status == SUCCESS
+
+        responses = stream.run()
+        assert stream.last_by_seqno == 2
+        assert int(responses[1]['expiration']) > 0
 
     def test_flow_control(self):
         """ verify flow control of a 64 byte buffer stream """
