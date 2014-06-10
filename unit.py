@@ -1838,7 +1838,7 @@ class RebTestCase(ParametrizedTestCase):
         self.cluster_reset()
         self.destroy_backend()
 
-    def cluster_reset(self, timeout = 600):
+    def cluster_reset(self, timeout = 120):
         """ rebalance out all nodes except one """
 
         rest = RestClient(self.host, port=self.rest_port)
@@ -2127,7 +2127,7 @@ class RebTestCase(ParametrizedTestCase):
             assert self.rest_client.failover(host)
 
         assert self.rest_client.rebalance([], self.hosts[2:])
-        assert self.rest_client.wait_for_rebalance(600)
+        assert self.rest_client.wait_for_rebalance(120)
 
 
         # check if original consumers still exist
@@ -2136,8 +2136,8 @@ class RebTestCase(ParametrizedTestCase):
         replica_vbs = self.all_vbucket_ids('replica')
         stats = self.mcd_client.stats('upr')
         upr_count = stats['ep_upr_count']
-        assert int(upr_count) == len(replica_vbs),\
-                "Got upr_count = {0}, expected = {1}".format(upr_count, len(replica_vbs))
+        assert int(upr_count) == 3,\
+            "Got upr_count = {0}, expected = {1}".format(upr_count, 3)
 
         # check consumer persisted and high_seqno are correct
         for vb in replica_vbs:
@@ -2153,7 +2153,8 @@ class RebTestCase(ParametrizedTestCase):
         for vb in replica_vbs:
             stream = self.upr_client.stream_req(vb, 0, 0, doc_count, 0, 0)
             stream.run()
-            assert stream.last_by_seqno == doc_count
+            assert stream.last_by_seqno == doc_count,\
+                    "Got %s, Expected %s" % (stream.last_by_seqno, doc_count)
 
     def test_failover_log_table_updated(self):
         """Verifies failover table entries are updated when vbucket ownership changes"""
