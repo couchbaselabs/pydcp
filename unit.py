@@ -2096,8 +2096,8 @@ class RebTestCase(ParametrizedTestCase):
         producer.close()
         assert self.rest_client.wait_for_rebalance(600)
 
-    def test_add_stream_during_failover(self):
-        """Verify consumer stream and its data remain on non-failover node"""
+    def test_stream_request_replica_to_active(self):
+        """Verify replica that vbs become active after failover"""
 
         self.upr_client.open_consumer("mystream")
         assert self.rest_client.rebalance(self.hosts[1:], [])
@@ -2117,11 +2117,6 @@ class RebTestCase(ParametrizedTestCase):
             for i in xrange(doc_count):
                 self.mcd_client.set('key' + str(i), 0, 0, 'value', vb)
 
-        # send add_stream request to node1 replica vbuckets
-        self.mcd_reset(active_vbs[0])
-        for vb in replica_vbs:
-            response = self.upr_client.add_stream(vb, 0)
-            assert response['status'] == SUCCESS
 
         for host in self.hosts[2:]:
             assert self.rest_client.failover(host)
@@ -2139,14 +2134,6 @@ class RebTestCase(ParametrizedTestCase):
         assert int(upr_count) == 3,\
             "Got upr_count = {0}, expected = {1}".format(upr_count, 3)
 
-        # check consumer persisted and high_seqno are correct
-        for vb in replica_vbs:
-            key = 'eq_uprq:mystream:stream_%s_start_seqno' % vb
-            assert key in stats, "Stream %s missing from stats" % vb
-
-            start_seqno = stats[key]
-            assert int(start_seqno) == doc_count,\
-                    "Expected seqno=%s got=%s" % (doc_count, start_seqno)
 
         # verify data can be streamed
         self.upr_client.open_producer("producerstream")
