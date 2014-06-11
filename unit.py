@@ -2006,30 +2006,32 @@ class RebTestCase(ParametrizedTestCase):
 
         # rebalance out nodeA
         restB.rebalance([], [nodeA])
-        assert restB.wait_for_rebalance(600)
+        try:
+            assert restB.wait_for_rebalance(600)
 
-        # get bucketinfo and reset rest client in case we assert after
-        bucket_info = restB.get_bucket_info()
+            # get bucketinfo and reset rest client in case we assert after
+            bucket_info = restB.get_bucket_info()
 
-        # verify expected seqnos of each vbid and failover table matches
-        assert 'nodes' in bucket_info
-        node_specs = bucket_info['nodes']
-        for spec in node_specs:
-            host = spec['hostname'].split(':')[0]
-            port = int(spec['ports']['direct'])
-            mcd_client = McdClient(host, port)
-            vb_stats = mcd_client.stats('vbucket-seqno')
-            assert 'value' in vb_stats
-            for vb in vb_ids:
-                key = 'vb_%s:high_seqno' % vb
-                assert key in vb_stats, "Missing stats for %s: "% key
-                assert vb_stats[key] == str(doc_count),\
-                    "expected high_seqno: %s, got: %s" % (doc_count, vb_stats[key])
-            mcd_client.close()
-
-        # remove nodeC before teardown
-        assert restB.rebalance([], [nodeC])
-        assert restB.wait_for_rebalance(600)
+            # verify expected seqnos of each vbid and failover table matches
+            assert 'nodes' in bucket_info
+            node_specs = bucket_info['nodes']
+            for spec in node_specs:
+                host = spec['hostname'].split(':')[0]
+                port = int(spec['ports']['direct'])
+                mcd_client = McdClient(host, port)
+                vb_stats = mcd_client.stats('vbucket-seqno')
+                for vb in vb_ids:
+                    key = 'vb_%s:high_seqno' % vb
+                    assert key in vb_stats, "Missing stats for %s: "% key
+                    assert vb_stats[key] == str(doc_count),\
+                        "expected high_seqno: %s, got: %s" % (doc_count, vb_stats[key])
+                mcd_client.close()
+        except AssertionError as aex:
+            raise
+        finally:
+            # remove nodeC before teardown
+            assert restB.rebalance([], [nodeC])
+            assert restB.wait_for_rebalance(600)
 
 
     def test_stream_req_during_failover(self):
