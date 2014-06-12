@@ -136,8 +136,8 @@ class UprClient(MemcachedClient):
         if not self.conn.isAlive():
             self._restart_reader()
 
-        self.send_op(op)
         self.ops[op.opaque] = op
+        self.send_op(op)
 
 
         # poll op queue for a response
