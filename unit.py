@@ -1719,14 +1719,15 @@ class UprTestCase(ParametrizedTestCase):
     def test_flow_control_ack_n_vbuckets(self):
 
         self.upr_client.open_producer("flowctl")
-        self.upr_client.flow_control(128)
 
-        mutations = 100
+        mutations = 2
         num_vbs = len(self.all_vbucket_ids())
+        buffsize = 4*num_vbs
+        self.upr_client.flow_control(buffsize)
 
         for vb in range(num_vbs):
-            for i in xrange(mutations):
-                self.mcd_client.set('key' + str(i), 0, 0, 'value', vb)
+            self.mcd_client.set('key1', 0, 0, 'value', vb)
+            self.mcd_client.set('key2', 0, 0, 'value', vb)
 
         # request mutations
         resp = self.mcd_client.stats('failovers')
@@ -1736,23 +1737,26 @@ class UprTestCase(ParametrizedTestCase):
 
 
         # ack until all mutations sent
-        done = 0
+        stats = self.mcd_client.stats('upr')
+        unacked = int(stats['eq_uprq:flowctl:unacked_bytes'])
         start_t = time.time()
-        while done != num_vbs:
-
-            done = 0
-            ack = self.upr_client.ack(128)
-
+        while unacked > 0:
+            ack = self.upr_client.ack(unacked)
+            assert ack['status'] == SUCCESS
             stats = self.mcd_client.stats('upr')
+            unacked = int(stats['eq_uprq:flowctl:unacked_bytes'])
 
-            for vb in range(num_vbs):
-                key = 'eq_uprq:flowctl:stream_%s_last_sent_seqno'%vb
-                seqno = int(stats[key])
-                if seqno == mutations:
-                    done += 1
-
-            assert time.time() - start_t < 500,\
+            assert time.time() - start_t < 120,\
                 "timed out waiting for seqno on all vbuckets"
+
+        stats = self.mcd_client.stats('upr')
+
+        for vb in range(num_vbs):
+            key = 'eq_uprq:flowctl:stream_%s_last_sent_seqno'%vb
+            seqno = int(stats[key])
+            assert seqno == mutations,\
+                "%s != %s" % (seqno, mutations)
+
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
