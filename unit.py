@@ -307,6 +307,18 @@ class UprTestCase(ParametrizedTestCase):
         assert response['status'] == SUCCESS
 
 
+    def test_add_stream_reopen_connection(self):
+
+        for i in range(10):
+            response = self.upr_client.open_consumer("mystream")
+            assert response['status'] == SUCCESS
+
+            response = self.upr_client.add_stream(0, 0)
+            assert response['status'] == SUCCESS
+
+            self.upr_client.close()
+
+
     """Add stream to producer
 
     Attempt to add stream to a producer connection. Expects to recieve
