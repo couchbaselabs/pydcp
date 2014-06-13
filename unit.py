@@ -1298,20 +1298,19 @@ class UprTestCase(ParametrizedTestCase):
         # snap_end > by_seqno
         self.upr_client.open_producer("rollback")
         resp = self.upr_client.stream_req(0, 0, 1, 3, vb_uuid, 1, 4)
-        assert resp and resp.status == ERR_ROLLBACK, resp
-        assert resp and resp.rollback == 1, resp
+        assert resp and resp.status == SUCCESS, resp.status
 
         # snap_start > by_seqno
         self.upr_client.open_producer("rollback")
         resp = self.upr_client.stream_req(0, 0, 4, 4, vb_uuid, 4, 4)
-        assert resp and resp.status == ERR_ROLLBACK, resp
-        assert resp and resp.rollback == 3, resp
+        assert resp and resp.status == ERR_ROLLBACK, resp.status
+        assert resp and resp.rollback == 3, resp.rollback
 
         # fallthrough
         self.upr_client.open_producer("rollback")
         resp = self.upr_client.stream_req(0, 0, 7, 7, vb_uuid, 2, 7)
-        assert resp and resp.status == ERR_ROLLBACK, resp
-        assert resp and resp.rollback == 2, resp
+        assert resp and resp.status == ERR_ROLLBACK, resp.status
+        assert resp and resp.rollback == 2, resp.rollback
 
 
     def test_stream_request_after_close(self):
