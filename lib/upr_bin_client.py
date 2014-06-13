@@ -26,6 +26,8 @@ class UprClient(MemcachedClient):
         self.conn = UprClient.Reader(self)
         self.conn.start()
 
+        self.dead = False
+
     def _restart_reader(self):
         """ restart reader thread """
         self.conn = UprClient.Reader(self)
@@ -37,8 +39,13 @@ class UprClient(MemcachedClient):
         if not self.conn.isAlive():
             self.reconnect()
             self._restart_reader()
+            self.dead = False
 
         return self._handle_op(op)
+
+    def close(self):
+        super(UprClient, self).close()
+        self.dead = True
 
     def open_consumer(self, name):
         """ opens an upr consumer connection """
@@ -76,6 +83,19 @@ class UprClient(MemcachedClient):
 
         op = Ack(nbytes)
         return self._handle_op(op)
+
+    def quit(self):
+        """ send quit command to mc - when response is recieved quit reader """
+        op = Quit()
+        r = {'opcode': op.opcode}
+        if not self.dead:
+            r = self._handle_op(op)
+            if r['status'] == 0:
+                self.dead = True
+        else:
+            r['status'] = 0xff
+
+        return r
 
     def add_stream(self, vbucket, takeover = 0):
         """ sent to upr-consumer to add stream on a particular vbucket.
@@ -151,11 +171,14 @@ class UprClient(MemcachedClient):
 
             wait -= 1
 
-            # check if op caused ClientError
             if not self.conn.isAlive():
-                resp = {'opcode'  : op.opcode,
-                        'status'  : 0xff}
+                # op caused ClientError
 
+                if resp is None:
+                    # client died without sending response
+                    resp = {'opcode'  : op.opcode,
+                            'status'  : 0xff}
+                break
 
         assert resp is not None,\
             "ERROR: Never received response for op: %s" % op.opcode
@@ -532,4 +555,15 @@ class Ack(Operation):
         response = { 'opcode'        : opcode,
                      'status'        : status,
                      'body'          : body}
+        return response
+
+class Quit(Operation):
+
+    def __init__(self):
+        opcode = CMD_QUIT
+        Operation.__init__(self, opcode)
+
+    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+        response = { 'opcode'        : opcode,
+                     'status'        : status}
         return response

@@ -61,7 +61,7 @@ class ParametrizedTestCase(unittest.TestCase):
         assert resp['status'] == SUCCESS, "Flush all is not enabled"
 
     def memcached_backend_teardown(self):
-        self.upr_client.close()
+        self.upr_client.quit()
         self.mcd_client.close()
 
     def couchbase_backend_setup(self):
@@ -76,7 +76,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.mcd_client = McdClient(self.host, self.port)
 
     def couchbase_backend_teardown(self):
-        self.upr_client.close()
+        self.upr_client.quit()
         self.mcd_client.close()
         for bucket in self.rest_client.get_all_buckets():
             logging.info("Deleting bucket %s" % bucket)
@@ -142,7 +142,7 @@ class UprTestCase(ParametrizedTestCase):
         response = self.mcd_client.stats('upr')
         assert response['eq_uprq:mystream:type'] == 'consumer'
 
-        self.upr_client.close()
+        self.upr_client.quit()
         time.sleep(1)
         response = self.mcd_client.stats('upr')
         assert 'eq_uprq:mystream:type' not in response
@@ -160,7 +160,7 @@ class UprTestCase(ParametrizedTestCase):
         response = self.mcd_client.stats('upr')
         assert response['eq_uprq:mystream:type'] == 'producer'
 
-        self.upr_client.close()
+        self.upr_client.quit()
         time.sleep(1)
         response = self.mcd_client.stats('upr')
         assert 'eq_uprq:mystream:type' not in response
@@ -178,7 +178,7 @@ class UprTestCase(ParametrizedTestCase):
         response = self.mcd_client.stats('upr')
         assert response['eq_uprq:notifier:type'] == 'notifier'
 
-        self.upr_client.close()
+        self.upr_client.quit()
         time.sleep(1)
 
         response = self.mcd_client.stats('upr')
