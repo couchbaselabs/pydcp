@@ -316,7 +316,7 @@ class UprTestCase(ParametrizedTestCase):
             response = self.upr_client.add_stream(0, 0)
             assert response['status'] == SUCCESS
 
-            self.upr_client.close()
+            self.upr_client.quit()
 
 
     """Add stream to producer
