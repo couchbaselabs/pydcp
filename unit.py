@@ -1536,6 +1536,27 @@ class UprTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
 
+    def test_stream_request_client_per_vb(self):
+        """ stream request muataions from each vbucket with a new client """
+
+        for vb in xrange(8):
+            for i in range(1000):
+                    self.mcd_client.set('key'+str(i), 0, 0, 'value', vb)
+
+        num_vbs = len(self.all_vbucket_ids())
+        for vb in xrange(8):
+
+            upr_client = UprClient(self.host, self.port)
+            upr_client.open_producer("producerstream")
+            stream = upr_client.stream_req(
+                vb, 0, 0, 1000, 0)
+
+            mutations = stream.run()
+            try:
+                assert stream.last_by_seqno == 1000, stream.last_by_seqno
+            finally:
+                upr_client.close()
+
     def test_flow_control(self):
         """ verify flow control of a 64 byte buffer stream """
 
