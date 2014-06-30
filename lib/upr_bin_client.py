@@ -547,9 +547,9 @@ class Ack(Operation):
     def __init__(self, nbytes):
         opcode = CMD_UPR_ACK
         self.nbytes = nbytes
-        acked = struct.pack(">L", self.nbytes)
+        extras = struct.pack(">L", self.nbytes)
         Operation.__init__(self, opcode,
-                           value = acked)
+                           extras = extras)
 
     def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
