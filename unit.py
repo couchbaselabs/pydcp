@@ -824,6 +824,7 @@ class UprTestCase(ParametrizedTestCase):
     After expected number of items have been created send request for failover
     log and expect seqno to match number
     """
+    @unittest.skip("needs debug")
     def test_failover_log_with_ops(self):
 
         stream = "mystream"
