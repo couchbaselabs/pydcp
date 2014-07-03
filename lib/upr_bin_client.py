@@ -82,7 +82,7 @@ class UprClient(MemcachedClient):
         """ sent to notify producer number of bytes client has received"""
 
         op = Ack(nbytes)
-        return self._handle_op(op)
+        return self._handle_op(op, 1)
 
     def quit(self):
         """ send quit command to mc - when response is recieved quit reader """
@@ -147,7 +147,7 @@ class UprClient(MemcachedClient):
             associated with a particular vbucket """
         return self.streams.get(vbucket)
 
-    def _handle_op(self, op):
+    def _handle_op(self, op, wait = 30):
         """ sends op to mcd. Then it recvs response
 
             if the received response is for another op then it will
@@ -161,7 +161,6 @@ class UprClient(MemcachedClient):
 
 
         # poll op queue for a response
-        wait = 30
         resp = None
         while wait > 0 and resp is None:
             try:
@@ -179,9 +178,6 @@ class UprClient(MemcachedClient):
                     resp = {'opcode'  : op.opcode,
                             'status'  : 0xff}
                 break
-
-        assert resp is not None,\
-            "ERROR: Never received response for op: %s" % op.opcode
 
         return resp
 
@@ -554,7 +550,7 @@ class Ack(Operation):
     def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
                      'status'        : status,
-                     'body'          : body}
+                     'error'          : body}
         return response
 
 class Quit(Operation):

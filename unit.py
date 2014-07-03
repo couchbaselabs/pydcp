@@ -1555,7 +1555,7 @@ class UprTestCase(ParametrizedTestCase):
                 resp = stream.next_response(1)
                 if resp is None:
                     ack = self.upr_client.ack(64)
-                    assert ack['status'] == SUCCESS
+                    assert ack is None, ack['error']
                     required_ack = True
 
         assert stream.last_by_seqno == 20
@@ -1633,8 +1633,7 @@ class UprTestCase(ParametrizedTestCase):
 
                     # ack
                     ack = self.upr_client.ack(64)
-                    assert ack['status'] == SUCCESS,\
-                            "Ack rejected"
+                    assert ack is None, ack['error']
                     required_ack = True
 
                     # new stream
@@ -1754,7 +1753,7 @@ class UprTestCase(ParametrizedTestCase):
         start_t = time.time()
         while unacked > 0:
             ack = self.upr_client.ack(unacked)
-            assert ack['status'] == SUCCESS
+            assert ack is None, ack['error']
             stats = self.mcd_client.stats('upr')
             unacked = int(stats['eq_uprq:flowctl:unacked_bytes'])
 
