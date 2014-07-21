@@ -1790,6 +1790,29 @@ class UprTestCase(ParametrizedTestCase):
                 "%s != %s" % (seqno, mutations)
 
 
+    def test_consumer_producer_same_vbucket(self):
+
+        # producer stream request
+        response = self.upr_client.open_producer("producer")
+        assert response['status'] == SUCCESS
+        stream = self.upr_client.stream_req(0, 0, 0, 1000, 0)
+        assert stream.status is SUCCESS
+
+        # consumer add stream
+        upr_client2 = UprClient(self.host, self.port)
+        response = upr_client2.open_consumer("consumer")
+        assert response['status'] == SUCCESS
+        response = upr_client2.add_stream(0, 0)
+        assert response['status'] == SUCCESS
+
+
+        for i in xrange(1000):
+            self.mcd_client.set('key%s'%i, 0, 0, 'value', 0)
+
+        stream.run()
+        assert stream.last_by_seqno == 1000
+        upr_client2.close()
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
