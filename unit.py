@@ -1272,7 +1272,7 @@ class UprTestCase(ParametrizedTestCase):
             clients.append(client)
 
 
-        for n in range(10):
+        for n in range(1, 10):
             self.mcd_client.set('key%s'%n, 0, 0, 'value', 0)
 
             for client in clients:
@@ -1283,7 +1283,8 @@ class UprTestCase(ParametrizedTestCase):
                 stream.run()
 
                 # stream changes and we should reach last seqno
-                assert stream.last_by_seqno == n
+                assert stream.last_by_seqno == n,\
+                    "%s != %s" % (stream.last_by_seqno, n)
 
         [client.close() for client in clients]
 
@@ -1750,8 +1751,8 @@ class UprTestCase(ParametrizedTestCase):
         self.upr_client.open_producer("flowctl")
 
         mutations = 2
-        num_vbs = len(self.all_vbucket_ids())
-        buffsize = 4*num_vbs
+        num_vbs = 8
+        buffsize = 64*num_vbs
         self.upr_client.flow_control(buffsize)
 
         for vb in range(num_vbs):
