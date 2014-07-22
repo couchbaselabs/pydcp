@@ -279,6 +279,7 @@ class UprStream(object):
             while self.has_response():
 
                 r = self.next_response()
+
                 if r is None:
                     retries -= 1
                     assert retries > 0,\
@@ -286,6 +287,9 @@ class UprStream(object):
                         % self.vbucket
                     continue
                 responses.append(r)
+
+                if 'status' in r and r['status'] == 0xff:
+                    break
 
                 if self.last_by_seqno >= to_seqno:
                     break
