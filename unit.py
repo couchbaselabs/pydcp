@@ -61,7 +61,7 @@ class ParametrizedTestCase(unittest.TestCase):
         assert resp['status'] == SUCCESS, "Flush all is not enabled"
 
     def memcached_backend_teardown(self):
-        self.upr_client.quit()
+        self.upr_client.close()
         self.mcd_client.close()
 
     def couchbase_backend_setup(self):
@@ -76,7 +76,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.mcd_client = McdClient(self.host, self.port)
 
     def couchbase_backend_teardown(self):
-        self.upr_client.quit()
+        self.upr_client.close()
         self.mcd_client.close()
         for bucket in self.rest_client.get_all_buckets():
             logging.info("Deleting bucket %s" % bucket)
@@ -142,7 +142,7 @@ class UprTestCase(ParametrizedTestCase):
         response = self.mcd_client.stats('upr')
         assert response['eq_uprq:mystream:type'] == 'consumer'
 
-        self.upr_client.quit()
+        self.upr_client.close()
         time.sleep(1)
         response = self.mcd_client.stats('upr')
         assert 'eq_uprq:mystream:type' not in response
@@ -160,7 +160,7 @@ class UprTestCase(ParametrizedTestCase):
         response = self.mcd_client.stats('upr')
         assert response['eq_uprq:mystream:type'] == 'producer'
 
-        self.upr_client.quit()
+        self.upr_client.close()
         time.sleep(1)
         response = self.mcd_client.stats('upr')
         assert 'eq_uprq:mystream:type' not in response
@@ -178,7 +178,7 @@ class UprTestCase(ParametrizedTestCase):
         response = self.mcd_client.stats('upr')
         assert response['eq_uprq:notifier:type'] == 'notifier'
 
-        self.upr_client.quit()
+        self.upr_client.close()
         time.sleep(1)
 
         response = self.mcd_client.stats('upr')
@@ -316,7 +316,7 @@ class UprTestCase(ParametrizedTestCase):
             response = self.upr_client.add_stream(0, 0)
             assert response['status'] == SUCCESS
 
-            self.upr_client.quit()
+            self.upr_client.reconnect()
 
 
     """Add stream to producer
@@ -534,7 +534,7 @@ class UprTestCase(ParametrizedTestCase):
                 backfilled = True
 
             stream.run()  # exaust stream
-            assert stream.ended
+            assert stream.has_response() == False
 
             self.upr_client.close_stream(0)
             return backfilled
@@ -570,14 +570,10 @@ class UprTestCase(ParametrizedTestCase):
             persisted = False
 
             assert stream.status is SUCCESS
+            snap = stream.next_response()
+            if snap['flag'] == 'disk':
+                persisted = True
 
-            while stream.has_response():
-                response = stream.next_response()
-                if response['opcode'] == CMD_SNAPSHOT_MARKER:
-                    if response['flag'] == 'disk':
-                        persisted = True
-
-            assert stream.last_by_seqno == 1
             return persisted
 
         self.upr_client.open_producer("mystream")
@@ -681,7 +677,7 @@ class UprTestCase(ParametrizedTestCase):
         stream = self.upr_client.stream_req(0, 0, 0, doc_count, 0)
         while stream.has_response():
 
-            response = stream.next_response(5)
+            response = stream.next_response()
             if not stream_closed:
                 response = self.upr_client.close_stream(0)
                 assert response['status'] == SUCCESS, response
@@ -837,7 +833,7 @@ class UprTestCase(ParametrizedTestCase):
 
         for i in range(100):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-            resp = stream.next_response(5)
+            resp = stream.next_response()
             assert resp
 
             if (i % 10) == 0:
@@ -1572,8 +1568,9 @@ class UprTestCase(ParametrizedTestCase):
 
         stream = self.upr_client.stream_req(0, 0, 0, 20, 0)
         required_ack = False
+
         while stream.has_response():
-                resp = stream.next_response(1)
+                resp = stream.next_response()
                 if resp is None:
                     ack = self.upr_client.ack(64)
                     assert ack is None, ack['error']
@@ -1645,7 +1642,7 @@ class UprTestCase(ParametrizedTestCase):
         required_ack = False
         last_seqno = 0
         while stream.has_response() and max_timeouts > 0:
-                resp = stream.next_response(2)
+                resp = stream.next_response()
 
                 if resp is None:
 
@@ -1738,7 +1735,7 @@ class UprTestCase(ParametrizedTestCase):
 
         tries = 10
         while tries > 0:
-            resp = notifier_stream.next_response(1)
+            resp = notifier_stream.next_response()
             if resp is None:
                 self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
             else:
@@ -2119,7 +2116,7 @@ class RebTestCase(ParametrizedTestCase):
         self.mcd_client.set('key1', 0, 0, 'value', vb)
         stream = producer.stream_req(vb, 0, 0, 1, 0)
         while stream.has_response():
-            response = stream.next_response(1)
+            response = stream.next_response()
             if 'key' in response:
                 assert response['key'] == 'key1'
         producer.close()
@@ -2139,7 +2136,7 @@ class RebTestCase(ParametrizedTestCase):
         assert self.rest_client.rebalance([], [failover_node])
         while stream.has_response():
 
-            response = stream.next_response(5)
+            response = stream.next_response()
 
             assert response is not None,\
                  "Timeout reading stream after failover"
