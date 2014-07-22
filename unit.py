@@ -1563,10 +1563,10 @@ class UprTestCase(ParametrizedTestCase):
         response = self.upr_client.flow_control(64)
         assert response['status'] == SUCCESS
 
-        for i in range(1024):
+        for i in range(5):
                 self.mcd_client.set('key'+str(i), 0, 0, 'value', 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 20, 0)
+        stream = self.upr_client.stream_req(0, 0, 0, 5, 0)
         required_ack = False
 
         while stream.has_response():
@@ -1576,7 +1576,7 @@ class UprTestCase(ParametrizedTestCase):
                     assert ack is None, ack['error']
                     required_ack = True
 
-        assert stream.last_by_seqno == 20
+        assert stream.last_by_seqno == 5
         assert required_ack, "received non flow-controlled stream"
 
     def test_flow_control_stats(self):
