@@ -424,7 +424,7 @@ class UprTestCase(ParametrizedTestCase):
         per connection. Expects every add stream request to succeed.
     """
     def test_add_stream_n_consumers_n_streams(self):
-        n = 16
+        n = 8
 
         vb_ids = self.all_vbucket_ids()
         for i in xrange(n):
@@ -434,7 +434,7 @@ class UprTestCase(ParametrizedTestCase):
             response = self.upr_client.open_consumer(stream)
             assert response['status'] == SUCCESS
 
-            for vb in vb_ids:
+            for vb in vb_ids[0:n]:
                 response = self.upr_client.add_stream(vb, 0)
                 assert response['status'] == SUCCESS
 
@@ -1555,13 +1555,14 @@ class UprTestCase(ParametrizedTestCase):
                 upr_client.close()
 
     def test_flow_control(self):
-        """ verify flow control of a 64 byte buffer stream """
+        """ verify flow control of a 128 byte buffer stream """
 
         response = self.upr_client.open_producer("flowctl")
         assert response['status'] == SUCCESS
 
 
-        response = self.upr_client.flow_control(64)
+        buffsize = 128
+        response = self.upr_client.flow_control(buffsize)
         assert response['status'] == SUCCESS
 
         for i in range(5):
@@ -1573,7 +1574,7 @@ class UprTestCase(ParametrizedTestCase):
         while stream.has_response():
                 resp = stream.next_response()
                 if resp is None:
-                    ack = self.upr_client.ack(64)
+                    ack = self.upr_client.ack(buffsize)
                     assert ack is None, ack['error']
                     required_ack = True
 
@@ -1583,7 +1584,7 @@ class UprTestCase(ParametrizedTestCase):
     def test_flow_control_stats(self):
         """ verify flow control stats """
 
-        buffsize = 24
+        buffsize = 128
         self.upr_client.open_producer("flowctl")
         self.upr_client.flow_control(buffsize)
         self.mcd_client.set('key1', 0, 0, 'valuevaluevalue', 0)
@@ -1591,8 +1592,6 @@ class UprTestCase(ParametrizedTestCase):
         self.mcd_client.set('key3', 0, 0, 'valuevaluevalue', 0)
 
         def info():
-            time.sleep(2)
-
             stats = self.mcd_client.stats('upr')
             acked = stats['eq_uprq:flowctl:total_acked_bytes']
             unacked = stats['eq_uprq:flowctl:unacked_bytes']
@@ -1638,7 +1637,6 @@ class UprTestCase(ParametrizedTestCase):
         vb_uuid = long(resp['vb_0:0:id'])
 
         stream = self.upr_client.stream_req(0, 0, 0, end_seqno, vb_uuid)
-        time.sleep(5)
         max_timeouts =  10
         required_ack = False
         last_seqno = 0
@@ -1651,7 +1649,7 @@ class UprTestCase(ParametrizedTestCase):
                     self.upr_client.close_stream(0)
 
                     # ack
-                    ack = self.upr_client.ack(64)
+                    ack = self.upr_client.ack(buffsize)
                     assert ack is None, ack['error']
                     required_ack = True
 
