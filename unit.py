@@ -571,7 +571,7 @@ class UprTestCase(ParametrizedTestCase):
 
             assert stream.status is SUCCESS
             snap = stream.next_response()
-            if snap['flag'] == 'disk':
+            if snap['flag'].find('disk') == 0:
                 persisted = True
 
             return persisted

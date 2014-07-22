@@ -465,10 +465,13 @@ class StreamRequest(Operation):
             assert len(body) == 20
             snap_start, snap_end, flag =\
                 struct.unpack(">QQI", body)
-            assert flag in (0,1) , "Invalid snapshot flag: %s" % flag
+            assert flag in (1,2,5,6) , "Invalid snapshot flag: %s" % flag
             assert snap_start <= snap_end, "Snapshot start: %s > end: %s" %\
                                                 (snap_start, snap_end)
-            flag = ('memory','disk')[flag]
+            flag = { 1 : 'memory',
+                     2 : 'disk',
+                     5 : 'memory-checkpoint',
+                     6 : 'disk-checkpoint'}[flag]
 
             response = { 'opcode'     : opcode,
                          'vbucket'    : status,
