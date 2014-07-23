@@ -551,7 +551,7 @@ class UprTestCase(ParametrizedTestCase):
         load('b')
 
         # attempt to stream until request contains backfilled items
-        tries = 5
+        tries = 10
         backfilled = stream(4, vb_uuid)
         while not backfilled and tries > 0:
             tries -= 1
