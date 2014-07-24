@@ -1809,6 +1809,30 @@ class UprTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 1000
         upr_client2.close()
 
+
+    def test_stream_request_cas(self):
+
+        n = 5
+        response = self.upr_client.open_producer("producer")
+        for i in xrange(n):
+            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+        for i in range(n):
+            key = 'key'+str(i)
+            rv, cas, _= self.mcd_client.get(key, 0)
+            assert rv == SUCCESS
+            self.mcd_client.cas(key, 0, 0, cas, 'new-value', 0)
+
+        stream = self.upr_client.stream_req(0, 0, 0, n, 0)
+        responses = stream.run()
+        mutations = \
+           filter(lambda r: r['opcode']==CMD_MUTATION, responses)
+        assert len(mutations) == n
+        assert stream.last_by_seqno == 2*n
+
+        for doc in mutations:
+            assert doc['value'] == 'new-value'
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
