@@ -271,7 +271,7 @@ class UprStream(object):
     def has_response(self):
         return not self._ended
 
-    def run(self, to_seqno = MAX_SEQNO, retries = 5):
+    def run(self, to_seqno = MAX_SEQNO, retries = 10):
 
         responses = []
 
