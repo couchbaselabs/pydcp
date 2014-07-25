@@ -203,6 +203,7 @@ class UprTestCase(ParametrizedTestCase):
         time.sleep(2)
         c2_stats = None
         for i in range(10):
+            self.upr_client = UprClient(self.host, self.port)
             response = self.upr_client.open_consumer(stream)
             assert response['status'] == SUCCESS
 
@@ -233,7 +234,8 @@ class UprTestCase(ParametrizedTestCase):
         time.sleep(2)
         c2_stats = None
         for i in range(10):
-            response = self.upr_client.open_producer(stream)
+            conn = UprClient(self.host, self.port)
+            response = conn.open_producer(stream)
             assert response['status'] == SUCCESS
 
         c2_stats = self.mcd_client.stats('upr')
@@ -271,12 +273,13 @@ class UprTestCase(ParametrizedTestCase):
     Expects each open connection response return true.
     """
     def test_open_n_consumer_producers(self):
-        n = 1024
+        n = 16
+        conns = [UprClient(self.host, self.port) for i in xrange(2*n)]
         ops = []
-        for i in range(n):
-            op = self.upr_client.open_consumer("consumer{0}".format(i))
+        for i in xrange(n):
+            op = conns[i].open_consumer("consumer{0}".format(i))
             ops.append(op)
-            op = self.upr_client.open_producer("producer{0}".format(i))
+            op = conns[n + i].open_producer("producer{0}".format(n + i))
             ops.append(op)
 
         for op in ops:
@@ -406,14 +409,15 @@ class UprTestCase(ParametrizedTestCase):
     def test_add_stream_n_consumers_1_stream(self):
         n = 16
 
+        conns = [UprClient(self.host, self.port) for i in xrange(n)]
         for i in xrange(n):
             response = self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
             stream = "mystream{0}".format(i)
-            response = self.upr_client.open_consumer(stream)
+            response = conns[i].open_consumer(stream)
             assert response['status'] == SUCCESS
 
-            response = self.upr_client.add_stream(0, 1)
+            response = conns[i].add_stream(0, 1)
             assert response['status'] == SUCCESS
 
         stats = self.mcd_client.stats('upr')
@@ -427,15 +431,16 @@ class UprTestCase(ParametrizedTestCase):
         n = 8
 
         vb_ids = self.all_vbucket_ids()
+        conns = [UprClient(self.host, self.port) for i in xrange(n)]
         for i in xrange(n):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
             stream = "mystream{0}".format(i)
-            response = self.upr_client.open_consumer(stream)
+            response = conns[i].open_consumer(stream)
             assert response['status'] == SUCCESS
 
             for vb in vb_ids[0:n]:
-                response = self.upr_client.add_stream(vb, 0)
+                response = conns[i].add_stream(vb, 0)
                 assert response['status'] == SUCCESS
 
         stats = self.mcd_client.stats('upr')
@@ -633,6 +638,7 @@ class UprTestCase(ParametrizedTestCase):
         stream as producer and attempt to reopen stream
         from same vbucket
     """
+    @unittest.skip("invalid scenario: MB-11785")
     def test_close_stream_reopen_as_producer(self):
        response = self.upr_client.open_consumer("mystream")
        assert response['status'] == SUCCESS
@@ -726,12 +732,13 @@ class UprTestCase(ParametrizedTestCase):
         client2.open_consumer(closestream)
         client2.add_stream(0, 0)
 
+        conns = [UprClient(self.host, self.port) for i in xrange(n)]
 
         for i in xrange(n):
 
             stream = "mystream{0}".format(i)
-            self.upr_client.open_consumer(stream)
-            self.upr_client.add_stream(0, 1)
+            conns[i].open_consumer(stream)
+            conns[i].add_stream(0, 1)
             if i == int(n/2):
                 # close stream
                 response = client2.close_stream(0)
@@ -850,7 +857,7 @@ class UprTestCase(ParametrizedTestCase):
     """
     def test_failover_log_n_producers_n_vbuckets(self):
 
-        n = 1024
+        n = 16
         response = self.upr_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
@@ -860,12 +867,14 @@ class UprTestCase(ParametrizedTestCase):
             response = self.upr_client.get_failover_log(id_)
             expected_seqnos[id_] = response['value'][0][0]
 
-        for i in range(n):
-            stream = "mystream{0}".format(i)
-            response = self.upr_client.open_producer(stream)
-            vbucket_id = vb_ids[random.randint(0,len(vb_ids) -1)]
-            response = self.upr_client.get_failover_log(vbucket_id)
-            assert response['value'][0][0] == expected_seqnos[vbucket_id]
+            # open n producers for this vbucket
+            for i in range(n):
+                stream = "mystream{0}".format(i)
+                conn = UprClient(self.host, self.port)
+                response = conn.open_producer(stream)
+                vbucket_id = id_
+                response = self.upr_client.get_failover_log(vbucket_id)
+                assert response['value'][0][0] == expected_seqnos[vbucket_id]
 
 
     """Basic upr stream request
@@ -1306,18 +1315,15 @@ class UprTestCase(ParametrizedTestCase):
         assert resp and resp.rollback == 0
 
         # snap_end > by_seqno
-        self.upr_client.open_producer("rollback")
         resp = self.upr_client.stream_req(0, 0, 1, 3, vb_uuid, 1, 4)
         assert resp and resp.status == SUCCESS, resp.status
 
         # snap_start > by_seqno
-        self.upr_client.open_producer("rollback")
         resp = self.upr_client.stream_req(0, 0, 4, 4, vb_uuid, 4, 4)
         assert resp and resp.status == ERR_ROLLBACK, resp.status
         assert resp and resp.rollback == 3, resp.rollback
 
         # fallthrough
-        self.upr_client.open_producer("rollback")
         resp = self.upr_client.stream_req(0, 0, 7, 7, vb_uuid, 2, 7)
         assert resp and resp.status == ERR_ROLLBACK, resp.status
         assert resp and resp.rollback == 2, resp.rollback
@@ -1379,6 +1385,7 @@ class UprTestCase(ParametrizedTestCase):
         assert response['opcode'] == CMD_STREAM_END
 
 
+        self.upr_client = UprClient(self.host, self.port)
         response = self.upr_client.open_producer("producer")
         assert response['status'] == SUCCESS
 
@@ -1675,6 +1682,7 @@ class UprTestCase(ParametrizedTestCase):
 
         for buffsize in sizes:
 
+            self.upr_client = UprClient(self.host, self.port)
             response = self.upr_client.open_producer("flowctl")
             assert response['status'] == SUCCESS
 
@@ -1697,6 +1705,7 @@ class UprTestCase(ParametrizedTestCase):
             return int(stats[key])
 
         def verify(connection, buffsize):
+            self.upr_client = UprClient(self.host, self.port)
             response = self.upr_client.open_producer(connection)
             assert response['status'] == SUCCESS
             response = self.upr_client.flow_control(buffsize)
