@@ -11,7 +11,7 @@ except ImportError:
 
 from unit import *
 
-class PyUPR:
+class PyDCP:
 
     def __init__(self, suite, backend, hosts, port, xml, only_tc):
         self.suite = suite
@@ -29,13 +29,13 @@ class PyUPR:
             if self.only_tc is not None:
                 self.run_singular()
             else:
-                self.run_suite(UprTestCase)
+                self.run_suite(DcpTestCase)
                 self.run_suite(McdTestCase)
                 if len(self.hosts) > 1:
                     self.run_suite(RebTestCase)
 
-        elif self.suite == 'upr':
-            self.run_suite(UprTestCase)
+        elif self.suite == 'dcp':
+            self.run_suite(DcpTestCase)
         elif self.suite == 'mcd':
             self.run_suite(McdTestCase)
         elif self.suite == 'exp':
@@ -67,7 +67,7 @@ class PyUPR:
         if self.only_tc.find('.') != -1:
             klass, self.only_tc = self.only_tc.split('.')
         else:
-            klass = 'UprTestCase'
+            klass = 'DcpTestCase'
 
         try:
             testcase_klass = eval(klass)
@@ -100,7 +100,7 @@ def set_log_level(level):
         logging.basicConfig(level=logging.DEBUG)
 
 def main():
-    parser = argparse.ArgumentParser(prog='pyupr',
+    parser = argparse.ArgumentParser(prog='pydcp',
                                      usage='%(prog)s [options]',
                                      add_help=False)
 
@@ -119,8 +119,8 @@ def main():
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    pyUpr = PyUPR(args.suite, backend, args.hosts, port, args.xml, args.only)
-    pyUpr.run_test()
+    pyDcp = PyDCP(args.suite, backend, args.hosts, port, args.xml, args.only)
+    pyDcp.run_test()
 
 if __name__ == "__main__":
     main()

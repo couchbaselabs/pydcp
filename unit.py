@@ -10,7 +10,7 @@ except ImportError:
     import unittest
 
 from constants import *
-from lib.upr_bin_client import UprClient
+from lib.dcp_bin_client import DcpClient
 from lib.mc_bin_client import MemcachedClient as McdClient
 from rest_client import RestClient
 from statshandler import Stats
@@ -55,13 +55,13 @@ class ParametrizedTestCase(unittest.TestCase):
             self.couchbase_backend_teardown()
 
     def memcached_backend_setup(self):
-        self.upr_client = UprClient(self.host, self.port)
+        self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
         resp = self.mcd_client.flush().next_response()
         assert resp['status'] == SUCCESS, "Flush all is not enabled"
 
     def memcached_backend_teardown(self):
-        self.upr_client.close()
+        self.dcp_client.close()
         self.mcd_client.close()
 
     def couchbase_backend_setup(self):
@@ -72,11 +72,11 @@ class ParametrizedTestCase(unittest.TestCase):
         logging.info("Creating default bucket")
         assert self.rest_client.create_default_bucket(self.replica)
         Stats.wait_for_warmup(self.host, self.port)
-        self.upr_client = UprClient(self.host, self.port)
+        self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
 
     def couchbase_backend_teardown(self):
-        self.upr_client.close()
+        self.dcp_client.close()
         self.mcd_client.close()
         for bucket in self.rest_client.get_all_buckets():
             logging.info("Deleting bucket %s" % bucket)
@@ -122,7 +122,7 @@ class ExpTestCase(ParametrizedTestCase):
     def tearDown(self):
         self.destroy_backend()
 
-class UprTestCase(ParametrizedTestCase):
+class DcpTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
 
@@ -130,59 +130,59 @@ class UprTestCase(ParametrizedTestCase):
         self.destroy_backend()
 
 
-    """Basic upr open consumer connection test
+    """Basic dcp open consumer connection test
 
-    Verifies that when the open upr consumer command is used there is a
+    Verifies that when the open dcp consumer command is used there is a
     connection instance that is created on the server and that when the
     tcp connection is closed the connection is remove from the server"""
     def test_open_consumer_connection_command(self):
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.mcd_client.stats('upr')
-        assert response['eq_uprq:mystream:type'] == 'consumer'
+        response = self.mcd_client.stats('dcp')
+        assert response['eq_dcpq:mystream:type'] == 'consumer'
 
-        self.upr_client.close()
+        self.dcp_client.close()
         time.sleep(1)
-        response = self.mcd_client.stats('upr')
-        assert 'eq_uprq:mystream:type' not in response
+        response = self.mcd_client.stats('dcp')
+        assert 'eq_dcpq:mystream:type' not in response
 
-    """Basic upr open producer connection test
+    """Basic dcp open producer connection test
 
-    Verifies that when the open upr producer command is used there is a
+    Verifies that when the open dcp producer command is used there is a
     connection instance that is created on the server and that when the
     tcp connection is closed the connection is remove from the server"""
     def test_open_producer_connection_command(self):
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.mcd_client.stats('upr')
-        assert response['eq_uprq:mystream:type'] == 'producer'
+        response = self.mcd_client.stats('dcp')
+        assert response['eq_dcpq:mystream:type'] == 'producer'
 
-        self.upr_client.close()
+        self.dcp_client.close()
         time.sleep(1)
-        response = self.mcd_client.stats('upr')
-        assert 'eq_uprq:mystream:type' not in response
+        response = self.mcd_client.stats('dcp')
+        assert 'eq_dcpq:mystream:type' not in response
 
     def test_open_notifier_connection_command(self):
-        """Basic upr open notifier connection test
+        """Basic dcp open notifier connection test
 
-        Verifies that when the open upr noifier command is used there is a
+        Verifies that when the open dcp noifier command is used there is a
         connection instance that is created on the server and that when the
         tcp connection is closed the connection is remove from the server"""
 
-        response = self.upr_client.open_notifier("notifier")
+        response = self.dcp_client.open_notifier("notifier")
         assert response['status'] == SUCCESS
 
-        response = self.mcd_client.stats('upr')
-        assert response['eq_uprq:notifier:type'] == 'notifier'
+        response = self.mcd_client.stats('dcp')
+        assert response['eq_dcpq:notifier:type'] == 'notifier'
 
-        self.upr_client.close()
+        self.dcp_client.close()
         time.sleep(1)
 
-        response = self.mcd_client.stats('upr')
-        assert 'eq_uprq:mystream:type' not in response
+        response = self.mcd_client.stats('dcp')
+        assert 'eq_dcpq:mystream:type' not in response
 
 
 
@@ -195,26 +195,26 @@ class UprTestCase(ParametrizedTestCase):
     """
     def test_open_consumer_connection_same_key(self):
         stream = "mystream"
-        self.upr_client.open_consumer(stream)
+        self.dcp_client.open_consumer(stream)
 
-        c1_stats = self.mcd_client.stats('upr')
-        assert c1_stats['eq_uprq:'+stream+':type'] == 'consumer'
+        c1_stats = self.mcd_client.stats('dcp')
+        assert c1_stats['eq_dcpq:'+stream+':type'] == 'consumer'
 
         time.sleep(2)
         c2_stats = None
         for i in range(10):
-            self.upr_client = UprClient(self.host, self.port)
-            response = self.upr_client.open_consumer(stream)
+            self.dcp_client = DcpClient(self.host, self.port)
+            response = self.dcp_client.open_consumer(stream)
             assert response['status'] == SUCCESS
 
 
-        c2_stats = self.mcd_client.stats('upr')
+        c2_stats = self.mcd_client.stats('dcp')
         assert c2_stats is not None
-        assert c2_stats['eq_uprq:'+stream+':type'] == 'consumer'
-        assert c2_stats['ep_upr_count'] == '1'
+        assert c2_stats['eq_dcpq:'+stream+':type'] == 'consumer'
+        assert c2_stats['ep_dcp_count'] == '1'
 
-        assert c1_stats['eq_uprq:'+stream+':created'] <\
-           c2_stats['eq_uprq:'+stream+':created']
+        assert c1_stats['eq_dcpq:'+stream+':created'] <\
+           c2_stats['eq_dcpq:'+stream+':created']
 
 
     """Open producer same key
@@ -226,25 +226,25 @@ class UprTestCase(ParametrizedTestCase):
     """
     def test_open_producer_connection_same_key(self):
         stream="mystream"
-        self.upr_client.open_producer(stream)
+        self.dcp_client.open_producer(stream)
 
-        c1_stats = self.mcd_client.stats('upr')
-        assert c1_stats['eq_uprq:'+stream+':type'] == 'producer'
+        c1_stats = self.mcd_client.stats('dcp')
+        assert c1_stats['eq_dcpq:'+stream+':type'] == 'producer'
 
         time.sleep(2)
         c2_stats = None
         for i in range(10):
-            conn = UprClient(self.host, self.port)
+            conn = DcpClient(self.host, self.port)
             response = conn.open_producer(stream)
             assert response['status'] == SUCCESS
 
-        c2_stats = self.mcd_client.stats('upr')
+        c2_stats = self.mcd_client.stats('dcp')
 
-        assert c2_stats['eq_uprq:'+stream+':type'] == 'producer'
-        assert c2_stats['ep_upr_count'] == '1'
+        assert c2_stats['eq_dcpq:'+stream+':type'] == 'producer'
+        assert c2_stats['ep_dcp_count'] == '1'
 
-        assert c1_stats['eq_uprq:'+stream+':created'] <\
-           c2_stats['eq_uprq:'+stream+':created']
+        assert c1_stats['eq_dcpq:'+stream+':created'] <\
+           c2_stats['eq_dcpq:'+stream+':created']
 
 
     """ Open consumer empty name
@@ -253,7 +253,7 @@ class UprTestCase(ParametrizedTestCase):
     to recieve a client error.
     """
     def test_open_consumer_no_name(self):
-        response = self.upr_client.open_consumer("")
+        response = self.dcp_client.open_consumer("")
         assert response['status'] == ERR_EINVAL
 
     """ Open producer empty name
@@ -262,19 +262,19 @@ class UprTestCase(ParametrizedTestCase):
     to recieve a client error.
     """
     def test_open_producer_no_name(self):
-        response = self.upr_client.open_producer("")
+        response = self.dcp_client.open_producer("")
         assert response['status'] == ERR_EINVAL
 
 
     """ Open n producers and consumers
 
-    Open n consumer and n producer connections.  Check upr stats and verify number
+    Open n consumer and n producer connections.  Check dcp stats and verify number
     of open connections = 2n with corresponding values for each conenction type.
     Expects each open connection response return true.
     """
     def test_open_n_consumer_producers(self):
         n = 16
-        conns = [UprClient(self.host, self.port) for i in xrange(2*n)]
+        conns = [DcpClient(self.host, self.port) for i in xrange(2*n)]
         ops = []
         for i in xrange(n):
             op = conns[i].open_consumer("consumer{0}".format(i))
@@ -285,15 +285,15 @@ class UprTestCase(ParametrizedTestCase):
         for op in ops:
             assert op['status'] == SUCCESS
 
-        stats = self.mcd_client.stats('upr')
-        assert stats['ep_upr_count'] == str(n * 2)
+        stats = self.mcd_client.stats('dcp')
+        assert stats['ep_dcp_count'] == str(n * 2)
 
     def test_open_notifier(self):
-        response = self.upr_client.open_notifier("notifier")
+        response = self.dcp_client.open_notifier("notifier")
         assert response['status'] == SUCCESS
 
     def test_open_notifier_no_name(self):
-        response = self.upr_client.open_notifier("")
+        response = self.dcp_client.open_notifier("")
         assert response['status'] == ERR_EINVAL
 
     """Basic add stream test
@@ -303,23 +303,23 @@ class UprTestCase(ParametrizedTestCase):
     add stream command is returned."""
     def test_add_stream_command(self):
 
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
 
     def test_add_stream_reopen_connection(self):
 
         for i in range(10):
-            response = self.upr_client.open_consumer("mystream")
+            response = self.dcp_client.open_consumer("mystream")
             assert response['status'] == SUCCESS
 
-            response = self.upr_client.add_stream(0, 0)
+            response = self.dcp_client.add_stream(0, 0)
             assert response['status'] == SUCCESS
 
-            self.upr_client.reconnect()
+            self.dcp_client.reconnect()
 
 
     """Add stream to producer
@@ -328,10 +328,10 @@ class UprTestCase(ParametrizedTestCase):
     client error response."""
     def test_add_stream_to_producer(self):
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == ERR_ECLIENT
 
     """Add stream test without open connection
@@ -340,7 +340,7 @@ class UprTestCase(ParametrizedTestCase):
     client as a consumer or producer.  Excepts request
     to throw client error"""
     def test_add_stream_without_connection(self):
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == ERR_ECLIENT
 
     """Add stream command with no consumer vbucket
@@ -348,10 +348,10 @@ class UprTestCase(ParametrizedTestCase):
     Attempts to add a stream when no vbucket exists on the consumer. The
     client shoudl expect a not my vbucket response immediately"""
     def test_add_stream_not_my_vbucket(self):
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(1025, 0)
+        response = self.dcp_client.add_stream(1025, 0)
         assert response['status'] == ERR_NOT_MY_VBUCKET
 
     """Add stream when stream exists
@@ -359,13 +359,13 @@ class UprTestCase(ParametrizedTestCase):
     Creates a stream and then attempts to create another stream for the
     same vbucket. Expects to fail with an exists error."""
     def test_add_stream_exists(self):
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == ERR_KEY_EEXISTS
 
     """Add stream to new consumer
@@ -375,20 +375,20 @@ class UprTestCase(ParametrizedTestCase):
     Expects that adding stream to second consumer passes"""
     def test_add_stream_to_duplicate_consumer(self):
 
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        upr_client2 = UprClient(self.host, self.port)
-        response = upr_client2.open_consumer("mystream")
+        dcp_client2 = DcpClient(self.host, self.port)
+        response = dcp_client2.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == ERR_ECLIENT
 
-        response = upr_client2.add_stream(0, 0)
+        response = dcp_client2.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
-        upr_client2.close()
+        dcp_client2.close()
 
     """
     Add a stream to consumer with the takeover flag set = 1.  Expects add stream
@@ -396,10 +396,10 @@ class UprTestCase(ParametrizedTestCase):
     """
     def test_add_stream_takeover(self):
 
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 1)
+        response = self.dcp_client.add_stream(0, 1)
         assert response['status'] == SUCCESS
 
     """
@@ -409,7 +409,7 @@ class UprTestCase(ParametrizedTestCase):
     def test_add_stream_n_consumers_1_stream(self):
         n = 16
 
-        conns = [UprClient(self.host, self.port) for i in xrange(n)]
+        conns = [DcpClient(self.host, self.port) for i in xrange(n)]
         for i in xrange(n):
             response = self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
@@ -420,8 +420,8 @@ class UprTestCase(ParametrizedTestCase):
             response = conns[i].add_stream(0, 1)
             assert response['status'] == SUCCESS
 
-        stats = self.mcd_client.stats('upr')
-        assert stats['ep_upr_count'] == str(n)
+        stats = self.mcd_client.stats('dcp')
+        assert stats['ep_dcp_count'] == str(n)
 
     """
         Open n consumer connection.  Add n streams to each consumer for unique vbucket
@@ -431,7 +431,7 @@ class UprTestCase(ParametrizedTestCase):
         n = 8
 
         vb_ids = self.all_vbucket_ids()
-        conns = [UprClient(self.host, self.port) for i in xrange(n)]
+        conns = [DcpClient(self.host, self.port) for i in xrange(n)]
         for i in xrange(n):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
@@ -443,8 +443,8 @@ class UprTestCase(ParametrizedTestCase):
                 response = conns[i].add_stream(vb, 0)
                 assert response['status'] == SUCCESS
 
-        stats = self.mcd_client.stats('upr')
-        assert stats['ep_upr_count'] == str(n)
+        stats = self.mcd_client.stats('dcp')
+        assert stats['ep_dcp_count'] == str(n)
 
     """
         Open a single consumer and add stream for all active vbuckets with the
@@ -452,19 +452,19 @@ class UprTestCase(ParametrizedTestCase):
     """
     def test_add_stream_takeover_all_vbuckets(self):
 
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
         # parsing keys: 'vb_1', 'vb_0',...
         vb_ids = self.all_vbucket_ids()
         for i in vb_ids:
-            response = self.upr_client.add_stream(i, 1)
+            response = self.dcp_client.add_stream(i, 1)
             assert response['status'] == SUCCESS
 
     def test_add_stream_various_ops(self):
         """ verify consumer can receive mutations created by various mcd ops """
 
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
@@ -484,15 +484,15 @@ class UprTestCase(ParametrizedTestCase):
         for i in range(100):
             self.mcd_client.decr('key2', amt = 2, vbucket = 0)
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == SUCCESS
-        stats = self.mcd_client.stats('upr')
-        mutations =stats['eq_uprq:mystream:stream_0_start_seqno']
+        stats = self.mcd_client.stats('dcp')
+        mutations =stats['eq_dcpq:mystream:stream_0_start_seqno']
         assert mutations == '402'
 
     def test_stream_request_deduped_items(self):
         """ request a duplicate mutation """
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
 
         # get vb uuid
         response = self.mcd_client.stats('failovers')
@@ -505,7 +505,7 @@ class UprTestCase(ParametrizedTestCase):
         # attempt to request mutations 1 and 2
         start_seqno = 1
         end_seqno = 2
-        stream = self.upr_client.stream_req(0, 0,
+        stream = self.dcp_client.stream_req(0, 0,
                                             start_seqno,
                                             end_seqno,
                                             vb_uuid)
@@ -516,7 +516,7 @@ class UprTestCase(ParametrizedTestCase):
 
     def test_stream_request_dupe_backfilled_items(self):
         """ request mutations across memory/backfill mutations"""
-        self.upr_client.open_producer("mystream")
+        self.dcp_client.open_producer("mystream")
 
         def load(i):
             """ load 3 and persist """
@@ -528,12 +528,12 @@ class UprTestCase(ParametrizedTestCase):
             backfilled = False
 
             # send a stream request mutations from 1st snapshot
-            stream = self.upr_client.stream_req(0, 0, 0, end, vb_uuid)
+            stream = self.dcp_client.stream_req(0, 0, 0, end, vb_uuid)
 
             # check if items were backfilled before streaming
-            stats = self.mcd_client.stats('upr')
+            stats = self.mcd_client.stats('dcp')
             num_backfilled =\
-             int(stats['eq_uprq:mystream:stream_0_backfilled'])
+             int(stats['eq_dcpq:mystream:stream_0_backfilled'])
 
             if num_backfilled > 0:
                 backfilled = True
@@ -541,7 +541,7 @@ class UprTestCase(ParametrizedTestCase):
             stream.run()  # exaust stream
             assert stream.has_response() == False
 
-            self.upr_client.close_stream(0)
+            self.dcp_client.close_stream(0)
             return backfilled
 
         # get vb uuid
@@ -570,7 +570,7 @@ class UprTestCase(ParametrizedTestCase):
         """ attempt a backfill stream request using vb_uuid = 0 """
 
         def disk_stream():
-            stream = self.upr_client.stream_req(0, 0, 0, 1, 0)
+            stream = self.dcp_client.stream_req(0, 0, 0, 1, 0)
             last_by_seqno = 0
             persisted = False
 
@@ -581,7 +581,7 @@ class UprTestCase(ParametrizedTestCase):
 
             return persisted
 
-        self.upr_client.open_producer("mystream")
+        self.dcp_client.open_producer("mystream")
         self.mcd_client.set('key', 0, 0, 'value', 0)
 
         tries = 20
@@ -594,7 +594,7 @@ class UprTestCase(ParametrizedTestCase):
     """Close stream that has not been initialized.
     Expects client error."""
     def test_close_stream_command(self):
-        response = self.upr_client.close_stream(0)
+        response = self.dcp_client.close_stream(0)
         assert response['status'] == ERR_ECLIENT
 
 
@@ -602,13 +602,13 @@ class UprTestCase(ParametrizedTestCase):
     return a success."""
     def test_close_consumer_stream(self):
 
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.close_stream(0)
+        response = self.dcp_client.close_stream(0)
         assert response['status'] == SUCCESS
 
 
@@ -618,19 +618,19 @@ class UprTestCase(ParametrizedTestCase):
         stream can be added after closed.
     """
     def test_close_stream_reopen(self):
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == ERR_KEY_EEXISTS
 
-        response = self.upr_client.close_stream(0)
+        response = self.dcp_client.close_stream(0)
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.add_stream(0, 0)
+        response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
     """
@@ -640,25 +640,25 @@ class UprTestCase(ParametrizedTestCase):
     """
     @unittest.skip("invalid scenario: MB-11785")
     def test_close_stream_reopen_as_producer(self):
-       response = self.upr_client.open_consumer("mystream")
+       response = self.dcp_client.open_consumer("mystream")
        assert response['status'] == SUCCESS
 
-       response = self.upr_client.add_stream(0, 0)
+       response = self.dcp_client.add_stream(0, 0)
        assert response['status'] == SUCCESS
 
-       response = self.upr_client.close_stream(0)
+       response = self.dcp_client.close_stream(0)
        assert response['status'] == SUCCESS
 
-       response = self.upr_client.open_producer("mystream")
+       response = self.dcp_client.open_producer("mystream")
        assert response['status'] == SUCCESS
 
-       response = self.upr_client.stream_req(0, 0, 0, 0, 0, 0)
+       response = self.dcp_client.stream_req(0, 0, 0, 0, 0, 0)
        assert response.status == SUCCESS
 
-       response = self.upr_client.open_consumer("mystream")
+       response = self.dcp_client.open_consumer("mystream")
        assert response['status'] == SUCCESS
 
-       response = self.upr_client.close_stream(0)
+       response = self.dcp_client.close_stream(0)
        assert response['status'] == ERR_KEY_ENOENT
 
 
@@ -671,7 +671,7 @@ class UprTestCase(ParametrizedTestCase):
 
         stream_closed = False
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
 
@@ -680,12 +680,12 @@ class UprTestCase(ParametrizedTestCase):
             self.mcd_client.set('key%s'%i, 0, 0, 'value', 0)
 
 
-        stream = self.upr_client.stream_req(0, 0, 0, doc_count, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0)
         while stream.has_response():
 
             response = stream.next_response()
             if not stream_closed:
-                response = self.upr_client.close_stream(0)
+                response = self.dcp_client.close_stream(0)
                 assert response['status'] == SUCCESS, response
                 stream_closed = True
 
@@ -702,16 +702,16 @@ class UprTestCase(ParametrizedTestCase):
     """
     def test_close_stream_twice(self):
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.stream_req(0, 0, 0, 1000, 0)
+        response = self.dcp_client.stream_req(0, 0, 0, 1000, 0)
         assert response.status == SUCCESS
 
-        response = self.upr_client.close_stream(0)
+        response = self.dcp_client.close_stream(0)
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.close_stream(0)
+        response = self.dcp_client.close_stream(0)
         assert response['status'] == ERR_KEY_ENOENT
 
     """
@@ -727,12 +727,12 @@ class UprTestCase(ParametrizedTestCase):
         Stats.wait_for_persistence(self.mcd_client)
 
         # add stream to be close by different client
-        client2 = UprClient(self.host, self.port)
+        client2 = DcpClient(self.host, self.port)
         closestream = "closestream"
         client2.open_consumer(closestream)
         client2.add_stream(0, 0)
 
-        conns = [UprClient(self.host, self.port) for i in xrange(n)]
+        conns = [DcpClient(self.host, self.port) for i in xrange(n)]
 
         for i in xrange(n):
 
@@ -745,12 +745,12 @@ class UprTestCase(ParametrizedTestCase):
                 assert response['status'] == SUCCESS
 
         time.sleep(2)
-        stats = self.mcd_client.stats('upr')
-        key = "eq_uprq:{0}:stream_0_state".format(closestream)
+        stats = self.mcd_client.stats('dcp')
+        key = "eq_dcpq:{0}:stream_0_state".format(closestream)
         assert stats[key] == 'dead'
 
         for i in xrange(n):
-            key = "eq_uprq:mystream{0}:stream_0_state".format(i)
+            key = "eq_dcpq:mystream{0}:stream_0_state".format(i)
             assert stats[key] in ('reading', 'pending')
 
         client2.close()
@@ -760,7 +760,7 @@ class UprTestCase(ParametrizedTestCase):
     attempts to retrieve failover log without establishing a connection to
     a producer.  Expects operation is not supported"""
     def test_get_failover_log_command(self):
-        response = self.upr_client.get_failover_log(0)
+        response = self.dcp_client.get_failover_log(0)
         assert response['status'] == ERR_ECLIENT
 
     """Request failover log from consumer
@@ -769,22 +769,22 @@ class UprTestCase(ParametrizedTestCase):
     operation is not supported."""
     def test_get_failover_log_consumer(self):
 
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.get_failover_log(0)
+        response = self.dcp_client.get_failover_log(0)
         assert response['status'] == ERR_ECLIENT
 
     """Request failover log from producer
 
     retrieve failover log from a producer. Expects to successfully recieve
-    failover log and for it to match upr stats."""
+    failover log and for it to match dcp stats."""
     def test_get_failover_log_producer(self):
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.get_failover_log(0)
+        response = self.dcp_client.get_failover_log(0)
         assert response['status'] == SUCCESS
 
         response = self.mcd_client.stats('failovers')
@@ -795,10 +795,10 @@ class UprTestCase(ParametrizedTestCase):
     retrieve failover log from invalid vbucket. Expects to not_my_vbucket from producer."""
     def test_get_failover_invalid_vbucket(self):
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.get_failover_log(1025)
+        response = self.dcp_client.get_failover_log(1025)
         assert response['status'] == ERR_NOT_MY_VBUCKET
 
 
@@ -811,12 +811,12 @@ class UprTestCase(ParametrizedTestCase):
     """
     def test_failover_log_during_stream_request(self):
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         seqno = stream.failover_log[0][1]
-        response = self.upr_client.get_failover_log(0)
+        response = self.dcp_client.get_failover_log(0)
 
         assert response['status'] == SUCCESS
         assert response['value'][0][1] == seqno
@@ -831,10 +831,10 @@ class UprTestCase(ParametrizedTestCase):
     def test_failover_log_with_ops(self):
 
         stream = "mystream"
-        response = self.upr_client.open_producer(stream)
+        response = self.dcp_client.open_producer(stream)
         assert response['status'] == SUCCESS
 
-        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
         seqno = stream.failover_log[0][1]
 
@@ -844,7 +844,7 @@ class UprTestCase(ParametrizedTestCase):
             assert resp
 
             if (i % 10) == 0:
-                fail_response = self.upr_client.get_failover_log(0)
+                fail_response = self.dcp_client.get_failover_log(0)
                 assert fail_response['status'] == SUCCESS
                 assert fail_response['value'][0][1] == seqno
 
@@ -858,35 +858,35 @@ class UprTestCase(ParametrizedTestCase):
     def test_failover_log_n_producers_n_vbuckets(self):
 
         n = 16
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         vb_ids = self.all_vbucket_ids()
         expected_seqnos = {}
         for id_ in vb_ids:
-            response = self.upr_client.get_failover_log(id_)
+            response = self.dcp_client.get_failover_log(id_)
             expected_seqnos[id_] = response['value'][0][0]
 
             # open n producers for this vbucket
             for i in range(n):
                 stream = "mystream{0}".format(i)
-                conn = UprClient(self.host, self.port)
+                conn = DcpClient(self.host, self.port)
                 response = conn.open_producer(stream)
                 vbucket_id = id_
-                response = self.upr_client.get_failover_log(vbucket_id)
+                response = self.dcp_client.get_failover_log(vbucket_id)
                 assert response['value'][0][0] == expected_seqnos[vbucket_id]
 
 
-    """Basic upr stream request
+    """Basic dcp stream request
 
     Opens a producer connection and sends a stream request command for
     vbucket 0. Since no items exist in the server we should accept the
     stream request and then send back a stream end message."""
     def test_stream_request_command(self):
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        stream = self.upr_client.stream_req(0, 0, 0, 0, 0, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 0, 0, 0)
         assert stream.opcode == CMD_STREAM_REQ
         end = stream.next_response()
         assert end and end['opcode'] == CMD_STREAM_END
@@ -896,41 +896,41 @@ class UprTestCase(ParametrizedTestCase):
     Opens a producer connection and then tries to create a stream with an
     invalid VBucket. Should get a not my vbucket error."""
     def test_stream_request_invalid_vbucket(self):
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.stream_req(1025, 0, 0, MAX_SEQNO, 0, 0)
+        response = self.dcp_client.stream_req(1025, 0, 0, MAX_SEQNO, 0, 0)
         assert response.status == ERR_NOT_MY_VBUCKET
 
-        response = self.mcd_client.stats('upr')
-        assert 'eq_uprq:mystream:stream_0_opaque' not in response
-        assert response['eq_uprq:mystream:type'] == 'producer'
+        response = self.mcd_client.stats('dcp')
+        assert 'eq_dcpq:mystream:stream_0_opaque' not in response
+        assert response['eq_dcpq:mystream:type'] == 'producer'
 
     """Stream request for invalid connection
 
-    Try to create a stream over a non-upr connection. The server should
+    Try to create a stream over a non-dcp connection. The server should
     disconnect from the client"""
     def test_stream_request_invalid_connection(self):
 
-        response = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0, 0)
+        response = self.dcp_client.stream_req(0, 0, 0, MAX_SEQNO, 0, 0)
         assert response.status == ERR_ECLIENT
 
-        response = self.mcd_client.stats('upr')
-        assert 'eq_uprq:mystream:type' not in response
+        response = self.mcd_client.stats('dcp')
+        assert 'eq_dcpq:mystream:type' not in response
 
     """Stream request for consumer connection
 
     Try to create a stream on a consumer connection. The server should
     disconnect from the client"""
     def test_stream_request_consumer_connection(self):
-        response = self.upr_client.open_consumer("mystream")
+        response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0)
+        response = self.dcp_client.stream_req(0, 0, 0, MAX_SEQNO, 0)
         assert response.status == ERR_ECLIENT
 
-        response = self.mcd_client.stats('upr')
-        assert 'eq_uprq:mystream:type' not in response
+        response = self.mcd_client.stats('dcp')
+        assert 'eq_dcpq:mystream:type' not in response
 
     """Stream request with start seqno bigger than end seqno
 
@@ -938,45 +938,45 @@ class UprTestCase(ParametrizedTestCase):
     seqno that is bigger than the end seqno. The stream should be closed with an
     range error."""
     def test_stream_request_start_seqno_bigger_than_end_seqno(self):
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.stream_req(0, 0, MAX_SEQNO, MAX_SEQNO/2, 0, 0)
+        response = self.dcp_client.stream_req(0, 0, MAX_SEQNO, MAX_SEQNO/2, 0, 0)
         assert response.status == ERR_ERANGE
 
-        response = self.mcd_client.stats('upr')
-        assert 'eq_uprq:mystream:stream_0_opaque' not in response
-        assert response['eq_uprq:mystream:type'] == 'producer'
+        response = self.mcd_client.stats('dcp')
+        assert 'eq_dcpq:mystream:stream_0_opaque' not in response
+        assert response['eq_dcpq:mystream:type'] == 'producer'
 
     """Stream requests from the same vbucket
 
     Opens a stream request for a vbucket to read up to seq 100. Then sends another
-    stream request for the same vbucket.  Expect a EXISTS error and upr stats
+    stream request for the same vbucket.  Expect a EXISTS error and dcp stats
     should refer to initial created stream."""
     def test_stream_from_same_vbucket(self):
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        response = self.upr_client.stream_req(0, 0, 0, MAX_SEQNO, 0)
+        response = self.dcp_client.stream_req(0, 0, 0, MAX_SEQNO, 0)
         assert response.status == SUCCESS
 
-        response = self.mcd_client.stats('upr')
-        assert response['eq_uprq:mystream:type'] == 'producer'
-        created = response['eq_uprq:mystream:created']
+        response = self.mcd_client.stats('dcp')
+        assert response['eq_dcpq:mystream:type'] == 'producer'
+        created = response['eq_dcpq:mystream:created']
         assert created >= 0
 
-        response = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        response = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert response.status == ERR_KEY_EEXISTS
 
-        response = self.mcd_client.stats('upr')
-        assert response['eq_uprq:mystream:created'] == created
+        response = self.mcd_client.stats('dcp')
+        assert response['eq_dcpq:mystream:created'] == created
 
 
 
-    """Basic upr stream request (Receives mutations)
+    """Basic dcp stream request (Receives mutations)
 
-    Stores 10 items into vbucket 0 and then creates an upr stream to
+    Stores 10 items into vbucket 0 and then creates an dcp stream to
     retrieve those items in order of sequence number.
     """
     def test_stream_request_with_ops(self):
@@ -986,20 +986,20 @@ class UprTestCase(ParametrizedTestCase):
         for i in range(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         mutations = 0
         last_by_seqno = 0
-        stream = self.upr_client.stream_req(0, 0, 0, doc_count, 0, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0, 0)
         assert stream.status == SUCCESS
         stream.run()
 
         assert stream.last_by_seqno == doc_count
 
-    """Receive mutation from upr stream from a later sequence
+    """Receive mutation from dcp stream from a later sequence
 
-    Stores 10 items into vbucket 0 and then creates an upr stream to
+    Stores 10 items into vbucket 0 and then creates an dcp stream to
     retrieve items from sequence number 7 to 10 on (4 items).
     """
     def test_stream_request_with_ops_start_sequence(self):
@@ -1011,7 +1011,7 @@ class UprTestCase(ParametrizedTestCase):
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         resp = self.mcd_client.stats('failovers')
@@ -1019,7 +1019,7 @@ class UprTestCase(ParametrizedTestCase):
         high_seqno = long(resp['vb_0:0:seq'])
 
         start_seqno = 7
-        stream = self.upr_client.stream_req(
+        stream = self.dcp_client.stream_req(
             0, 0, start_seqno, end_seqno, vb_uuid)
 
         assert stream.status == SUCCESS
@@ -1031,10 +1031,10 @@ class UprTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 10
         assert mutations == 3
 
-    """Basic upr stream request (Receives mutations/deletions)
+    """Basic dcp stream request (Receives mutations/deletions)
 
     Stores 10 items into vbucket 0 and then deletes 5 of thos items. After
-    the items have been inserted/deleted from the server we create an upr
+    the items have been inserted/deleted from the server we create an dcp
     stream to retrieve those items in order of sequence number.
     """
     def test_stream_request_with_deletes(self):
@@ -1049,11 +1049,11 @@ class UprTestCase(ParametrizedTestCase):
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         last_by_seqno = 0
-        stream = self.upr_client.stream_req(0, 0, 0, end_seqno, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, 0)
         assert stream.status == SUCCESS
         responses = stream.run()
 
@@ -1083,17 +1083,17 @@ class UprTestCase(ParametrizedTestCase):
         assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
                                    'checkpoint')
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         mutations = 0
         markers = 0
         last_by_seqno = 0
-        stream = self.upr_client.stream_req(0, 0, 0, end_seqno, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, 0)
         assert stream.status == SUCCESS
 
         state = Stats.get_stat(self.mcd_client,
-                               'eq_uprq:mystream:stream_0_state', 'upr')
+                               'eq_dcpq:mystream:stream_0_state', 'dcp')
         if state != 'dead':
             assert state == 'backfilling'
 
@@ -1112,7 +1112,7 @@ class UprTestCase(ParametrizedTestCase):
         """ verify deleted mutations can be streamed after backfill
             task has occured """
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         resp = self.mcd_client.stats('failovers')
@@ -1134,11 +1134,11 @@ class UprTestCase(ParametrizedTestCase):
         tries = 10
         while not backfilling and tries > 0:
             # stream request until backfilling occurs
-            self.upr_client.stream_req(0, 0, 0, 5,
+            self.dcp_client.stream_req(0, 0, 0, 5,
                                        vb_uuid)
-            stats = self.mcd_client.stats('upr')
+            stats = self.mcd_client.stats('dcp')
             num_backfilled =\
-             int(stats['eq_uprq:mystream:stream_0_backfilled'])
+             int(stats['eq_dcpq:mystream:stream_0_backfilled'])
             backfilling = num_backfilled > 0
             tries -= 1
             time.sleep(2)
@@ -1146,7 +1146,7 @@ class UprTestCase(ParametrizedTestCase):
         assert backfilling, "ERROR: backfill task did not start"
 
         # attempt to stream deleted mutations
-        stream = self.upr_client.stream_req(0, 0, 0, 3, vb_uuid)
+        stream = self.dcp_client.stream_req(0, 0, 0, 3, vb_uuid)
         response = stream.next_response()
 
 
@@ -1161,10 +1161,10 @@ class UprTestCase(ParametrizedTestCase):
         for i in range(10):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        stream = self.upr_client.stream_req(0, 0, 0, 20, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 20, 0)
         assert stream.status == SUCCESS
         stream.run(10)
         assert stream.last_by_seqno == 10
@@ -1189,14 +1189,14 @@ class UprTestCase(ParametrizedTestCase):
                  self.mcd_client.set('key' + str(i), 0, 0, 'value', vb)
 
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         streams = {}
         stats = self.mcd_client.stats('vbucket-seqno')
         for vb in range(4):
             en = int(stats['vb_%d:high_seqno' % vb])
-            stream = self.upr_client.stream_req(vb, 0, 0, en, 0)
+            stream = self.dcp_client.stream_req(vb, 0, 0, en, 0)
             streams[vb] = {'stream' : stream,
                            'mutations' : 0,
                            'last_seqno' : 0 }
@@ -1219,7 +1219,7 @@ class UprTestCase(ParametrizedTestCase):
         to receive a rollback response with seqno to roll back to
     """
     def test_stream_request_rollback(self):
-        response = self.upr_client.open_producer("rollback")
+        response = self.dcp_client.open_producer("rollback")
         assert response['status'] == SUCCESS
 
         self.mcd_client.set('key1', 0, 0, 'value', 0)
@@ -1233,14 +1233,14 @@ class UprTestCase(ParametrizedTestCase):
         rollback = long(vb_stats[vb_id+':high_seqno'])
 
         start_seqno = end_seqno =  3
-        stream = self.upr_client.stream_req(0, 0, start_seqno, end_seqno, vb_uuid)
+        stream = self.dcp_client.stream_req(0, 0, start_seqno, end_seqno, vb_uuid)
 
         assert stream.status == ERR_ROLLBACK
         assert stream.rollback == rollback
         assert stream.rollback_seqno == fail_seqno
 
         start_seqno = end_seqno = rollback
-        stream = self.upr_client.stream_req(0, 0, start_seqno - 1, end_seqno, vb_uuid)
+        stream = self.dcp_client.stream_req(0, 0, start_seqno - 1, end_seqno, vb_uuid)
         stream.run()
 
         assert end_seqno == stream.last_by_seqno
@@ -1252,7 +1252,7 @@ class UprTestCase(ParametrizedTestCase):
         resend stream request n times each with high seqno's and expect rollback for each attempt.
     """
     def test_stream_request_n_rollbacks(self):
-        response = self.upr_client.open_producer("rollback")
+        response = self.dcp_client.open_producer("rollback")
         assert response['status'] == SUCCESS
 
         vb_stats = self.mcd_client.stats('vbucket-seqno')
@@ -1262,7 +1262,7 @@ class UprTestCase(ParametrizedTestCase):
             self.mcd_client.set('key1', 0, 0, 'value', 0)
 
             by_seqno = n + 1
-            stream = self.upr_client.stream_req(0, 0, by_seqno+1, by_seqno+2, vb_uuid)
+            stream = self.dcp_client.stream_req(0, 0, by_seqno+1, by_seqno+2, vb_uuid)
             assert stream.status == ERR_ROLLBACK
             assert stream.rollback_seqno == 0
 
@@ -1275,7 +1275,7 @@ class UprTestCase(ParametrizedTestCase):
         clients = []
 
         for n in range(10):
-            client = UprClient(self.host, self.port)
+            client = DcpClient(self.host, self.port)
             op = client.open_producer("producer:%s" % n)
             assert op['status'] == SUCCESS
             clients.append(client)
@@ -1309,22 +1309,22 @@ class UprTestCase(ParametrizedTestCase):
         vb_uuid = long(resp['vb_0:0:id'])
 
         # vb_uuid does not exist
-        self.upr_client.open_producer("rollback")
-        resp = self.upr_client.stream_req(0, 0, 1, 3, 0, 1, 1)
+        self.dcp_client.open_producer("rollback")
+        resp = self.dcp_client.stream_req(0, 0, 1, 3, 0, 1, 1)
         assert resp and resp.status == ERR_ROLLBACK
         assert resp and resp.rollback == 0
 
         # snap_end > by_seqno
-        resp = self.upr_client.stream_req(0, 0, 1, 3, vb_uuid, 1, 4)
+        resp = self.dcp_client.stream_req(0, 0, 1, 3, vb_uuid, 1, 4)
         assert resp and resp.status == SUCCESS, resp.status
 
         # snap_start > by_seqno
-        resp = self.upr_client.stream_req(0, 0, 4, 4, vb_uuid, 4, 4)
+        resp = self.dcp_client.stream_req(0, 0, 4, 4, vb_uuid, 4, 4)
         assert resp and resp.status == ERR_ROLLBACK, resp.status
         assert resp and resp.rollback == 3, resp.rollback
 
         # fallthrough
-        resp = self.upr_client.stream_req(0, 0, 7, 7, vb_uuid, 2, 7)
+        resp = self.dcp_client.stream_req(0, 0, 7, 7, vb_uuid, 2, 7)
         assert resp and resp.status == ERR_ROLLBACK, resp.status
         assert resp and resp.rollback == 2, resp.rollback
 
@@ -1335,7 +1335,7 @@ class UprTestCase(ParametrizedTestCase):
         """
 
         doc_count = 100
-        self.upr_client.open_producer("mystream")
+        self.dcp_client.open_producer("mystream")
 
         for i in xrange(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
@@ -1345,15 +1345,15 @@ class UprTestCase(ParametrizedTestCase):
         vb_uuid = long(resp['vb_0:0:id'])
 
 
-        stream = self.upr_client.stream_req(0, 0, 0, doc_count,
+        stream = self.dcp_client.stream_req(0, 0, 0, doc_count,
                                         vb_uuid)
 
         stream.run(doc_count/2)
-        self.upr_client.close()
+        self.dcp_client.close()
 
-        self.upr_client = UprClient(self.host, self.port)
-        self.upr_client.open_producer("mystream")
-        stream = self.upr_client.stream_req(0, 0, stream.last_by_seqno,
+        self.dcp_client = DcpClient(self.host, self.port)
+        self.dcp_client.open_producer("mystream")
+        stream = self.dcp_client.stream_req(0, 0, stream.last_by_seqno,
                                             doc_count, vb_uuid)
         while stream.has_response():
             response = stream.next_response()
@@ -1368,14 +1368,14 @@ class UprTestCase(ParametrizedTestCase):
 
 
         doc_count = 100
-        response = self.upr_client.open_notifier("notifier")
+        response = self.dcp_client.open_notifier("notifier")
         assert response['status'] == SUCCESS
 
         resp = self.mcd_client.stats('failovers')
         vb_uuid = long(resp['vb_0:0:id'])
 
         notifier_stream =\
-            self.upr_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid)
+            self.dcp_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid)
 
         for i in range(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
@@ -1385,12 +1385,12 @@ class UprTestCase(ParametrizedTestCase):
         assert response['opcode'] == CMD_STREAM_END
 
 
-        self.upr_client = UprClient(self.host, self.port)
-        response = self.upr_client.open_producer("producer")
+        self.dcp_client = DcpClient(self.host, self.port)
+        response = self.dcp_client.open_producer("producer")
         assert response['status'] == SUCCESS
 
 
-        stream = self.upr_client.stream_req(0, 0, 0, doc_count, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0)
         assert stream.status == SUCCESS
         stream.run()
         assert stream.last_by_seqno == doc_count
@@ -1398,7 +1398,7 @@ class UprTestCase(ParametrizedTestCase):
     def test_stream_request_notifier_bad_uuid(self):
         """Wait for mutations from missing vb_uuid"""
 
-        response = self.upr_client.open_notifier("notifier")
+        response = self.dcp_client.open_notifier("notifier")
         assert response['status'] == SUCCESS
 
         # set 1
@@ -1407,14 +1407,14 @@ class UprTestCase(ParametrizedTestCase):
         # create notifier stream with vb_uuid that doesn't exist
         # expect rollback since this value can never be reached
         vb_uuid = 0
-        stream = self.upr_client.stream_req(0, 0, 1, 0, 0)
+        stream = self.dcp_client.stream_req(0, 0, 1, 0, 0)
         assert stream.status == ERR_ROLLBACK,\
                 "ERROR: response expected = %s, received = %s" %\
                     (ERR_ROLLBACK, stream.status)
 
     def test_stream_request_append(self):
         """ stream appended mutations """
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
@@ -1424,7 +1424,7 @@ class UprTestCase(ParametrizedTestCase):
             self.mcd_client.append('key',str(i), 0, 0)
             val += str(i)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
         responses = stream.run()
@@ -1433,7 +1433,7 @@ class UprTestCase(ParametrizedTestCase):
 
     def test_stream_request_prepend(self):
         """ stream prepended mutations """
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
@@ -1443,7 +1443,7 @@ class UprTestCase(ParametrizedTestCase):
             self.mcd_client.prepend('key',str(i), 0, 0)
             val = str(i) + val
 
-        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
         responses = stream.run()
@@ -1452,7 +1452,7 @@ class UprTestCase(ParametrizedTestCase):
 
     def test_stream_request_incr(self):
         """ stream mutations created by incr command """
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
@@ -1461,7 +1461,7 @@ class UprTestCase(ParametrizedTestCase):
         for i in range(100):
             self.mcd_client.incr('key', amt = 2, vbucket = 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
         responses = stream.run()
@@ -1471,7 +1471,7 @@ class UprTestCase(ParametrizedTestCase):
 
     def test_stream_request_decr(self):
         """ stream mutations created by decr command """
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
@@ -1480,7 +1480,7 @@ class UprTestCase(ParametrizedTestCase):
         for i in range(100):
             self.mcd_client.decr('key', amt = 2, vbucket = 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
         responses = stream.run()
@@ -1489,7 +1489,7 @@ class UprTestCase(ParametrizedTestCase):
 
     def test_stream_request_replace(self):
         """ stream mutations created by replace command """
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
@@ -1498,7 +1498,7 @@ class UprTestCase(ParametrizedTestCase):
         for i in range(100):
             self.mcd_client.replace('key', 0, 0, 'value'+str(i), 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 100, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
         responses = stream.run()
@@ -1509,14 +1509,14 @@ class UprTestCase(ParametrizedTestCase):
     def test_stream_request_touch(self):
         """ stream mutations created by touch command """
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
         self.mcd_client.set('key', 100, 0, 'value', 0)
         self.mcd_client.touch('key', 1, 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 2, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 2, 0)
         assert stream.status == SUCCESS
 
         responses = stream.run()
@@ -1526,14 +1526,14 @@ class UprTestCase(ParametrizedTestCase):
     def test_stream_request_gat(self):
         """ stream mutations created by get-and-touch command """
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         val = 'base-'
         self.mcd_client.set('key', 100, 0, 'value', 0)
         self.mcd_client.gat('key', 1, 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 2, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 2, 0)
         assert stream.status == SUCCESS
 
         responses = stream.run()
@@ -1550,38 +1550,38 @@ class UprTestCase(ParametrizedTestCase):
         num_vbs = len(self.all_vbucket_ids())
         for vb in xrange(8):
 
-            upr_client = UprClient(self.host, self.port)
-            upr_client.open_producer("producerstream")
-            stream = upr_client.stream_req(
+            dcp_client = DcpClient(self.host, self.port)
+            dcp_client.open_producer("producerstream")
+            stream = dcp_client.stream_req(
                 vb, 0, 0, 1000, 0)
 
             mutations = stream.run()
             try:
                 assert stream.last_by_seqno == 1000, stream.last_by_seqno
             finally:
-                upr_client.close()
+                dcp_client.close()
 
     def test_flow_control(self):
         """ verify flow control of a 128 byte buffer stream """
 
-        response = self.upr_client.open_producer("flowctl")
+        response = self.dcp_client.open_producer("flowctl")
         assert response['status'] == SUCCESS
 
 
         buffsize = 128
-        response = self.upr_client.flow_control(buffsize)
+        response = self.dcp_client.flow_control(buffsize)
         assert response['status'] == SUCCESS
 
         for i in range(5):
                 self.mcd_client.set('key'+str(i), 0, 0, 'value', 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, 5, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 5, 0)
         required_ack = False
 
         while stream.has_response():
                 resp = stream.next_response()
                 if resp is None:
-                    ack = self.upr_client.ack(buffsize)
+                    ack = self.dcp_client.ack(buffsize)
                     assert ack is None, ack['error']
                     required_ack = True
 
@@ -1592,24 +1592,24 @@ class UprTestCase(ParametrizedTestCase):
         """ verify flow control stats """
 
         buffsize = 128
-        self.upr_client.open_producer("flowctl")
-        self.upr_client.flow_control(buffsize)
+        self.dcp_client.open_producer("flowctl")
+        self.dcp_client.flow_control(buffsize)
         self.mcd_client.set('key1', 0, 0, 'valuevaluevalue', 0)
         self.mcd_client.set('key2', 0, 0, 'valuevaluevalue', 0)
         self.mcd_client.set('key3', 0, 0, 'valuevaluevalue', 0)
 
         def info():
-            stats = self.mcd_client.stats('upr')
-            acked = stats['eq_uprq:flowctl:total_acked_bytes']
-            unacked = stats['eq_uprq:flowctl:unacked_bytes']
-            sent = stats['eq_uprq:flowctl:total_bytes_sent']
+            stats = self.mcd_client.stats('dcp')
+            acked = stats['eq_dcpq:flowctl:total_acked_bytes']
+            unacked = stats['eq_dcpq:flowctl:unacked_bytes']
+            sent = stats['eq_dcpq:flowctl:total_bytes_sent']
 
             return int(acked), int(sent), int(unacked)
 
         # all stats 0
         assert all(map(lambda x: x==0, info()))
 
-        stream = self.upr_client.stream_req(0, 0, 0, 3, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 3, 0)
         acked, sent, unacked = info()
         assert acked == 0
         assert unacked == sent
@@ -1617,7 +1617,7 @@ class UprTestCase(ParametrizedTestCase):
         # ack received bytes
         last_acked = acked
         while unacked > 0:
-            ack = self.upr_client.ack(buffsize)
+            ack = self.dcp_client.ack(buffsize)
             acked, sent, unacked = info()
             assert acked == last_acked + buffsize
             last_acked = acked
@@ -1628,11 +1628,11 @@ class UprTestCase(ParametrizedTestCase):
     def test_flow_control_stream_closed(self):
         """ close and reopen stream during with flow controlled client"""
 
-        response = self.upr_client.open_producer("flowctl")
+        response = self.dcp_client.open_producer("flowctl")
         assert response['status'] == SUCCESS
 
         buffsize = 128
-        response = self.upr_client.flow_control(buffsize)
+        response = self.dcp_client.flow_control(buffsize)
         assert response['status'] == SUCCESS
 
         end_seqno = 5
@@ -1643,7 +1643,7 @@ class UprTestCase(ParametrizedTestCase):
         resp = self.mcd_client.stats('failovers')
         vb_uuid = long(resp['vb_0:0:id'])
 
-        stream = self.upr_client.stream_req(0, 0, 0, end_seqno, vb_uuid)
+        stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, vb_uuid)
         max_timeouts =  10
         required_ack = False
         last_seqno = 0
@@ -1653,15 +1653,15 @@ class UprTestCase(ParametrizedTestCase):
                 if resp is None:
 
                     # close
-                    self.upr_client.close_stream(0)
+                    self.dcp_client.close_stream(0)
 
                     # ack
-                    ack = self.upr_client.ack(buffsize)
+                    ack = self.dcp_client.ack(buffsize)
                     assert ack is None, ack['error']
                     required_ack = True
 
                     # new stream
-                    stream = self.upr_client.stream_req(0, 0, last_seqno,
+                    stream = self.dcp_client.stream_req(0, 0, last_seqno,
                                                         end_seqno, vb_uuid)
                     assert stream.status  == SUCCESS,\
                             "Re-open Stream failed"
@@ -1682,15 +1682,15 @@ class UprTestCase(ParametrizedTestCase):
 
         for buffsize in sizes:
 
-            self.upr_client = UprClient(self.host, self.port)
-            response = self.upr_client.open_producer("flowctl")
+            self.dcp_client = DcpClient(self.host, self.port)
+            response = self.dcp_client.open_producer("flowctl")
             assert response['status'] == SUCCESS
 
-            response = self.upr_client.flow_control(buffsize)
+            response = self.dcp_client.flow_control(buffsize)
             assert response['status'] == SUCCESS
 
-            stats = self.mcd_client.stats('upr')
-            key = 'eq_uprq:flowctl:max_buffer_bytes'
+            stats = self.mcd_client.stats('dcp')
+            key = 'eq_dcpq:flowctl:max_buffer_bytes'
             conn_bsize = int(stats[key])
             assert  conn_bsize == buffsize,\
                 '%s != %s' % (conn_bsize, buffsize)
@@ -1700,15 +1700,15 @@ class UprTestCase(ParametrizedTestCase):
         """ use various buffer sizes between producer connections """
 
         def max_buffer_bytes(connection):
-            stats = self.mcd_client.stats('upr')
-            key = 'eq_uprq:%s:max_buffer_bytes' % connection
+            stats = self.mcd_client.stats('dcp')
+            key = 'eq_dcpq:%s:max_buffer_bytes' % connection
             return int(stats[key])
 
         def verify(connection, buffsize):
-            self.upr_client = UprClient(self.host, self.port)
-            response = self.upr_client.open_producer(connection)
+            self.dcp_client = DcpClient(self.host, self.port)
+            response = self.dcp_client.open_producer(connection)
             assert response['status'] == SUCCESS
-            response = self.upr_client.flow_control(buffsize)
+            response = self.dcp_client.flow_control(buffsize)
             assert response['status'] == SUCCESS
             producer_bsize = max_buffer_bytes(connection)
             assert producer_bsize == buffsize,\
@@ -1725,16 +1725,16 @@ class UprTestCase(ParametrizedTestCase):
         mutations = 100
 
         # create notifier
-        response = self.upr_client.open_notifier('flowctl')
+        response = self.dcp_client.open_notifier('flowctl')
         assert response['status'] == SUCCESS
-        self.upr_client.flow_control(16)
+        self.dcp_client.flow_control(16)
 
         # vb uuid
         resp = self.mcd_client.stats('failovers')
         vb_uuid = long(resp['vb_0:0:id'])
 
         # set to notify when seqno endseqno reached
-        notifier_stream = self.upr_client.stream_req(0, 0, mutations + 1, 0,  vb_uuid)
+        notifier_stream = self.dcp_client.stream_req(0, 0, mutations + 1, 0,  vb_uuid)
 
         # persist mutations
         for i in range(mutations):
@@ -1755,12 +1755,12 @@ class UprTestCase(ParametrizedTestCase):
 
     def test_flow_control_ack_n_vbuckets(self):
 
-        self.upr_client.open_producer("flowctl")
+        self.dcp_client.open_producer("flowctl")
 
         mutations = 2
         num_vbs = 8
         buffsize = 64*num_vbs
-        self.upr_client.flow_control(buffsize)
+        self.dcp_client.flow_control(buffsize)
 
         for vb in range(num_vbs):
             self.mcd_client.set('key1', 0, 0, 'value', vb)
@@ -1770,26 +1770,26 @@ class UprTestCase(ParametrizedTestCase):
         resp = self.mcd_client.stats('failovers')
         vb_uuid = long(resp['vb_0:0:id'])
         for vb in range(num_vbs):
-            self.upr_client.stream_req(vb, 0, 0, mutations, vb_uuid)
+            self.dcp_client.stream_req(vb, 0, 0, mutations, vb_uuid)
 
 
         # ack until all mutations sent
-        stats = self.mcd_client.stats('upr')
-        unacked = int(stats['eq_uprq:flowctl:unacked_bytes'])
+        stats = self.mcd_client.stats('dcp')
+        unacked = int(stats['eq_dcpq:flowctl:unacked_bytes'])
         start_t = time.time()
         while unacked > 0:
-            ack = self.upr_client.ack(unacked)
+            ack = self.dcp_client.ack(unacked)
             assert ack is None, ack['error']
-            stats = self.mcd_client.stats('upr')
-            unacked = int(stats['eq_uprq:flowctl:unacked_bytes'])
+            stats = self.mcd_client.stats('dcp')
+            unacked = int(stats['eq_dcpq:flowctl:unacked_bytes'])
 
             assert time.time() - start_t < 120,\
                 "timed out waiting for seqno on all vbuckets"
 
-        stats = self.mcd_client.stats('upr')
+        stats = self.mcd_client.stats('dcp')
 
         for vb in range(num_vbs):
-            key = 'eq_uprq:flowctl:stream_%s_last_sent_seqno'%vb
+            key = 'eq_dcpq:flowctl:stream_%s_last_sent_seqno'%vb
             seqno = int(stats[key])
             assert seqno == mutations,\
                 "%s != %s" % (seqno, mutations)
@@ -1798,16 +1798,16 @@ class UprTestCase(ParametrizedTestCase):
     def test_consumer_producer_same_vbucket(self):
 
         # producer stream request
-        response = self.upr_client.open_producer("producer")
+        response = self.dcp_client.open_producer("producer")
         assert response['status'] == SUCCESS
-        stream = self.upr_client.stream_req(0, 0, 0, 1000, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 1000, 0)
         assert stream.status is SUCCESS
 
         # consumer add stream
-        upr_client2 = UprClient(self.host, self.port)
-        response = upr_client2.open_consumer("consumer")
+        dcp_client2 = DcpClient(self.host, self.port)
+        response = dcp_client2.open_consumer("consumer")
         assert response['status'] == SUCCESS
-        response = upr_client2.add_stream(0, 0)
+        response = dcp_client2.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
 
@@ -1816,13 +1816,13 @@ class UprTestCase(ParametrizedTestCase):
 
         stream.run()
         assert stream.last_by_seqno == 1000
-        upr_client2.close()
+        dcp_client2.close()
 
 
     def test_stream_request_cas(self):
 
         n = 5
-        response = self.upr_client.open_producer("producer")
+        response = self.dcp_client.open_producer("producer")
         for i in xrange(n):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
@@ -1832,7 +1832,7 @@ class UprTestCase(ParametrizedTestCase):
             assert rv == SUCCESS
             self.mcd_client.cas(key, 0, 0, cas, 'new-value', 0)
 
-        stream = self.upr_client.stream_req(0, 0, 0, n, 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, n, 0)
         responses = stream.run()
         mutations = \
            filter(lambda r: r['opcode']==CMD_MUTATION, responses)
@@ -1959,7 +1959,7 @@ class RebTestCase(ParametrizedTestCase):
            during rebalance an item is set and then a stream request is made
            to get latest item along with all previous items"""
 
-        response = self.upr_client.open_producer("mystream")
+        response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
 
@@ -1988,7 +1988,7 @@ class RebTestCase(ParametrizedTestCase):
             start_seqno = mutations
             mutations = mutations + 1
             last_by_seqno = 0
-            stream = self.upr_client.stream_req(0, 0, start_seqno, mutations, vb_uuid)
+            stream = self.dcp_client.stream_req(0, 0, start_seqno, mutations, vb_uuid)
             stream.run()
             assert stream.last_by_seqno == mutations
 
@@ -2014,7 +2014,7 @@ class RebTestCase(ParametrizedTestCase):
             """ load doc_count items and stream them """
             self.mcd_reset(vbucket)
 
-            response = self.upr_client.open_producer("mystream")
+            response = self.dcp_client.open_producer("mystream")
             vb_stats = self.mcd_client.stats('vbucket-seqno')
             fl_stats = self.mcd_client.stats('failovers')
 
@@ -2023,7 +2023,7 @@ class RebTestCase(ParametrizedTestCase):
             end_seqno = long(vb_stats[vb_id+':high_seqno'])
             vb_uuid = long(vb_stats[vb_id+':uuid'])
 
-            stream = self.upr_client.stream_req(0, 0,
+            stream = self.dcp_client.stream_req(0, 0,
                                                 start_seqno,
                                                 end_seqno,
                                                 vb_uuid, None)
@@ -2141,7 +2141,7 @@ class RebTestCase(ParametrizedTestCase):
         self.mcd_reset(vb)
 
         # create a separate client for stream requests
-        producer = UprClient(self.host, self.port)
+        producer = DcpClient(self.host, self.port)
         producer.open_producer("producerstream")
 
         # stream 1st item
@@ -2160,7 +2160,7 @@ class RebTestCase(ParametrizedTestCase):
         self.mcd_client.set('key2', 0, 0, 'value', vb)
 
         # update producer
-        producer = UprClient(self.host, self.port)
+        producer = DcpClient(self.host, self.port)
         producer.open_producer("producerstream")
         stream = producer.stream_req(vb, 0, 0, 2, 0)
 
@@ -2189,7 +2189,7 @@ class RebTestCase(ParametrizedTestCase):
     def test_stream_request_replica_to_active(self):
         """Verify replica that vbs become active after failover"""
 
-        self.upr_client.open_consumer("mystream")
+        self.dcp_client.open_consumer("mystream")
         assert self.rest_client.rebalance(self.hosts[1:], [])
         assert self.rest_client.wait_for_rebalance(600)
 
@@ -2219,16 +2219,16 @@ class RebTestCase(ParametrizedTestCase):
         self.mcd_client = McdClient(orig_host, orig_port)
         active_vbs = self.all_vbucket_ids('active')
         replica_vbs = self.all_vbucket_ids('replica')
-        stats = self.mcd_client.stats('upr')
-        upr_count = stats['ep_upr_count']
-        assert int(upr_count) == 3,\
-            "Got upr_count = {0}, expected = {1}".format(upr_count, 3)
+        stats = self.mcd_client.stats('dcp')
+        dcp_count = stats['ep_dcp_count']
+        assert int(dcp_count) == 3,\
+            "Got dcp_count = {0}, expected = {1}".format(dcp_count, 3)
 
 
         # verify data can be streamed
-        self.upr_client.open_producer("producerstream")
+        self.dcp_client.open_producer("producerstream")
         for vb in replica_vbs:
-            stream = self.upr_client.stream_req(vb, 0, 0, doc_count, 0, 0)
+            stream = self.dcp_client.stream_req(vb, 0, 0, doc_count, 0, 0)
             stream.run()
             assert stream.last_by_seqno == doc_count,\
                     "Got %s, Expected %s" % (stream.last_by_seqno, doc_count)
@@ -2288,14 +2288,14 @@ class RebTestCase(ParametrizedTestCase):
         def stream_and_failover():
             """streaming mutations from nodeB"""
 
-            upr_client = UprClient(self.host, self.port)
-            upr_client.open_producer("mystream")
-            stream = upr_client.stream_req(vb, 0, 0, doc_count, 0)
+            dcp_client = DcpClient(self.host, self.port)
+            dcp_client.open_producer("mystream")
+            stream = dcp_client.stream_req(vb, 0, 0, doc_count, 0)
             stream.run(doc_count/2)
             assert self.rest_client.failover(nodeB)
             stream.run()
             assert stream.last_by_seqno == doc_count
-            upr_client.close()
+            dcp_client.close()
 
         # failover and stream
         stream_and_failover()
