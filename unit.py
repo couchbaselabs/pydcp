@@ -301,15 +301,16 @@ class DcpTestCase(ParametrizedTestCase):
     This test verifies a simple add stream command. It expects that a stream
     request message will be sent to the producer before a response for the
     add stream command is returned."""
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_command(self):
 
         response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
-
         response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == SUCCESS
 
 
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_reopen_connection(self):
 
         for i in range(10):
@@ -326,6 +327,7 @@ class DcpTestCase(ParametrizedTestCase):
 
     Attempt to add stream to a producer connection. Expects to recieve
     client error response."""
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_to_producer(self):
 
         response = self.dcp_client.open_producer("mystream")
@@ -339,6 +341,7 @@ class DcpTestCase(ParametrizedTestCase):
     This test attempts to add a stream without idnetifying the
     client as a consumer or producer.  Excepts request
     to throw client error"""
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_without_connection(self):
         response = self.dcp_client.add_stream(0, 0)
         assert response['status'] == ERR_ECLIENT
@@ -347,6 +350,7 @@ class DcpTestCase(ParametrizedTestCase):
 
     Attempts to add a stream when no vbucket exists on the consumer. The
     client shoudl expect a not my vbucket response immediately"""
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_not_my_vbucket(self):
         response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
@@ -358,6 +362,7 @@ class DcpTestCase(ParametrizedTestCase):
 
     Creates a stream and then attempts to create another stream for the
     same vbucket. Expects to fail with an exists error."""
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_exists(self):
         response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
@@ -373,6 +378,7 @@ class DcpTestCase(ParametrizedTestCase):
     Creates two clients each with consumers using the same key.
     Attempts to add stream to first consumer and second consumer.
     Expects that adding stream to second consumer passes"""
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_to_duplicate_consumer(self):
 
         response = self.dcp_client.open_consumer("mystream")
@@ -394,6 +400,7 @@ class DcpTestCase(ParametrizedTestCase):
     Add a stream to consumer with the takeover flag set = 1.  Expects add stream
     command to return successfully.
     """
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_takeover(self):
 
         response = self.dcp_client.open_consumer("mystream")
@@ -406,6 +413,7 @@ class DcpTestCase(ParametrizedTestCase):
         Open n consumer connection.  Add one stream to each consumer for the same
         vbucket.  Expects every add stream request to succeed.
     """
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_n_consumers_1_stream(self):
         n = 16
 
@@ -427,6 +435,7 @@ class DcpTestCase(ParametrizedTestCase):
         Open n consumer connection.  Add n streams to each consumer for unique vbucket
         per connection. Expects every add stream request to succeed.
     """
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_n_consumers_n_streams(self):
         n = 8
 
@@ -450,6 +459,7 @@ class DcpTestCase(ParametrizedTestCase):
         Open a single consumer and add stream for all active vbuckets with the
         takeover flag set in the request.  Expects every add stream request to succeed.
     """
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_takeover_all_vbuckets(self):
 
         response = self.dcp_client.open_consumer("mystream")
@@ -461,6 +471,7 @@ class DcpTestCase(ParametrizedTestCase):
             response = self.dcp_client.add_stream(i, 1)
             assert response['status'] == SUCCESS
 
+    @unittest.skip("invalid: MB-11890")
     def test_add_stream_various_ops(self):
         """ verify consumer can receive mutations created by various mcd ops """
 
@@ -600,6 +611,7 @@ class DcpTestCase(ParametrizedTestCase):
 
     """Close a consumer stream. Expects close operation to
     return a success."""
+    @unittest.skip("invalid: MB-11890")
     def test_close_consumer_stream(self):
 
         response = self.dcp_client.open_consumer("mystream")
@@ -617,6 +629,7 @@ class DcpTestCase(ParametrizedTestCase):
         Immediately after closing stream send a request to add stream again.  Expects that
         stream can be added after closed.
     """
+    @unittest.skip("invalid: MB-11890")
     def test_close_stream_reopen(self):
         response = self.dcp_client.open_consumer("mystream")
         assert response['status'] == SUCCESS
@@ -719,6 +732,7 @@ class DcpTestCase(ParametrizedTestCase):
         that if one of the consumer closes then the producer doesn't stop
         sending changes to other consumers
     """
+    @unittest.skip("invalid: MB-11890")
     def test_close_stream_n_consumers(self):
 
         n = 16
@@ -1803,12 +1817,12 @@ class DcpTestCase(ParametrizedTestCase):
         stream = self.dcp_client.stream_req(0, 0, 0, 1000, 0)
         assert stream.status is SUCCESS
 
-        # consumer add stream
+        # reopen conenction as consumer
         dcp_client2 = DcpClient(self.host, self.port)
         response = dcp_client2.open_consumer("consumer")
         assert response['status'] == SUCCESS
-        response = dcp_client2.add_stream(0, 0)
-        assert response['status'] == SUCCESS
+        #response = dcp_client2.add_stream(0, 0)
+        #assert response['status'] == SUCCESS
 
 
         for i in xrange(1000):
