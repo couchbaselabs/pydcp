@@ -1575,6 +1575,16 @@ class DcpTestCase(ParametrizedTestCase):
             finally:
                 dcp_client.close()
 
+    def test_stream_request_mutation_with_flags(self):
+        self.dcp_client.open_producer("mystream")
+        self.mcd_client.set('key', 0, 2, 'value', 0)
+        stream = self.dcp_client.stream_req(0, 0, 0, 1, 0)
+        snap = stream.next_response()
+        res = stream.next_response()
+        item = self.mcd_client.get('key', 0)
+        assert res['flags'] == 2
+        assert item[0] == 2
+
     def test_flow_control(self):
         """ verify flow control of a 128 byte buffer stream """
 
