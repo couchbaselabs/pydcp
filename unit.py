@@ -14,6 +14,13 @@ from lib.dcp_bin_client import DcpClient
 from lib.mc_bin_client import MemcachedClient as McdClient
 from rest_client import RestClient
 from statshandler import Stats
+from threading import Thread
+
+import paramiko
+import os
+from subprocess import Popen, PIPE
+
+
 
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
 
@@ -24,13 +31,18 @@ class ParametrizedTestCase(unittest.TestCase):
     """ TestCase classes that want to be parametrized should
         inherit from this class.
     """
-    def __init__(self, methodName, backend, host, port, kwargs):
+    def __init__(self, methodName, backend, host, port,ssh_username, ssh_password, kwargs):
+
         super(ParametrizedTestCase, self).__init__(methodName)
         self.backend = backend
         self.host = host
         self.port = port
+        self.ssh_username = ssh_username
+        self.ssh_password = ssh_password
         self.replica = 1
         self.kwargs = kwargs
+        self.verification_seqno = None
+        self.verification_vb = 0
 
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
@@ -83,8 +95,66 @@ class ParametrizedTestCase(unittest.TestCase):
             assert self.rest_client.delete_bucket(bucket)
         self.rest_client = None
 
+
+    def _execute_command(self, cmd ):
+
+
+        if self.host == '127.0.0.1' or self.host == 'localhost':
+            p = Popen(cmd , shell=True, stdout=PIPE, stderr=PIPE)
+            output, stderro = p.communicate()
+            return output
+
+        else:
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            print 'connecting to {0} with username : {1} password: {2}'.format(self.host, self.ssh_username, self.ssh_password)
+            try:
+                ssh_client.connect(hostname=self.host, username=self.ssh_username, password=self.ssh_password)
+            except paramiko.AuthenticationException:
+                print "Authentication failed for {0}".format(self.host)
+                exit(1)
+            except paramiko.BadHostKeyException:
+                print "Invalid Host key for {0}".format(self.host)
+                exit(1)
+            except Exception:
+                print "Can't establish SSH session with {0}".format(self.host)
+                exit(1)
+
+            stdin, stdout, stderr = ssh_client.exec_command(cmd)
+            stdin.close()
+
+            output = []
+            for line in stdout.read().splitlines():
+                output.append(line)
+
+            for line in stderr.read().splitlines():
+                print line
+
+            stdout.close()
+            stderr.close()
+            return output[0]
+
+
+
+    def get_persisted_seq_no(self, vbucket, rev=1):
+
+        # if dev, assume a Mac, other assume Linux - Windows is currently not supported
+        if ('COUCH_BINDIR' in os.environ) and (self.host == '127.0.0.1' or self.host == 'localhost'):
+            bindir = os.environ['COUCH_BINDIR']
+        else:
+            bindir =  '/opt/couchbase/bin'
+
+        cmd = bindir + '/couch_dbinfo ' + self.db_file_location + '/' + str(vbucket) + \
+               '.couch.' + str(rev) + ' | grep update_seq'
+
+        result = self._execute_command( cmd )
+
+        return int(result.split(':')[1])
+
+
     @staticmethod
-    def parametrize(testcase_klass=None, backend='cb', host='127.0.0.8091', port = 11210, **kwargs):
+    def parametrize(testcase_klass=None, backend='cb', host='127.0.0.8091', port = 11210,
+                    ssh_username='root', ssh_password='couchbase', **kwargs):
         """ Create a suite containing all tests taken from the given
             subclass, passing them the parameter 'param'.
         """
@@ -97,10 +167,10 @@ class ParametrizedTestCase(unittest.TestCase):
             func = kwargs['only_tc']
             assert func in testnames, "TestCase not found: %s.%s" %\
                 (testcase_klass.__name__, func)
-            suite.addTest(testcase_klass(func, backend, host, port, kwargs))
+            suite.addTest(testcase_klass(func, backend, host, port, ssh_username, ssh_password, kwargs))
         else:
             for name in testnames:
-                suite.addTest(testcase_klass(name, backend, host, port, kwargs))
+                suite.addTest(testcase_klass(name, backend, host, port, ssh_username, ssh_password, kwargs))
         return suite
 
     def all_vbucket_ids(self, type_ = None):
@@ -125,8 +195,14 @@ class ExpTestCase(ParametrizedTestCase):
 class DcpTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
+        self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
 
     def tearDown(self):
+
+        if self.verification_seqno is not None:
+            Stats.wait_for_persistence(self.mcd_client)
+            assert self.verification_seqno == self.get_persisted_seq_no(self.verification_vb)
+
         self.destroy_backend()
 
 
@@ -415,7 +491,9 @@ class DcpTestCase(ParametrizedTestCase):
     """
     @unittest.skip("invalid: MB-11890")
     def test_add_stream_n_consumers_1_stream(self):
+
         n = 16
+        self.verification_seqno = n
 
         conns = [DcpClient(self.host, self.port) for i in xrange(n)]
         for i in xrange(n):
@@ -431,6 +509,9 @@ class DcpTestCase(ParametrizedTestCase):
         stats = self.mcd_client.stats('dcp')
         assert stats['ep_dcp_count'] == str(n)
 
+        Stats.wait_for_persistence(self.mcd_client)
+
+
     """
         Open n consumer connection.  Add n streams to each consumer for unique vbucket
         per connection. Expects every add stream request to succeed.
@@ -438,6 +519,7 @@ class DcpTestCase(ParametrizedTestCase):
     @unittest.skip("invalid: MB-11890")
     def test_add_stream_n_consumers_n_streams(self):
         n = 8
+        self.verification_seqno = n
 
         vb_ids = self.all_vbucket_ids()
         conns = [DcpClient(self.host, self.port) for i in xrange(n)]
@@ -454,6 +536,8 @@ class DcpTestCase(ParametrizedTestCase):
 
         stats = self.mcd_client.stats('dcp')
         assert stats['ep_dcp_count'] == str(n)
+
+
 
     """
         Open a single consumer and add stream for all active vbuckets with the
@@ -501,6 +585,10 @@ class DcpTestCase(ParametrizedTestCase):
         mutations =stats['eq_dcpq:mystream:stream_0_start_seqno']
         assert mutations == '402'
 
+
+        self.verification_seqno = 402
+
+
     def test_stream_request_deduped_items(self):
         """ request a duplicate mutation """
         response = self.dcp_client.open_producer("mystream")
@@ -524,6 +612,11 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.status is SUCCESS
         stream.run()
         assert stream.last_by_seqno == 3
+
+
+        self.verification_seqno == 3
+
+
 
     def test_stream_request_dupe_backfilled_items(self):
         """ request mutations across memory/backfill mutations"""
@@ -575,6 +668,9 @@ class DcpTestCase(ParametrizedTestCase):
             backfilled = stream(4, vb_uuid)
 
         assert backfilled, "ERROR: no back filled items were streamed"
+
+        self.verification_seqno= 4
+
 
 
     def test_backfill_from_default_vb_uuid(self):
@@ -708,6 +804,8 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno < doc_count,\
             "Error: recieved all mutations on closed stream"
 
+        self.verification_seqno = doc_count
+
     """
         Sets up a consumer connection.  Adds stream and then sends 2 close stream requests.  Expects
         second request to close stream returns noent
@@ -768,6 +866,9 @@ class DcpTestCase(ParametrizedTestCase):
             assert stats[key] in ('reading', 'pending')
 
         client2.close()
+
+
+        self.verification_seqno = 100
 
     """Request failover log without connection
 
@@ -862,6 +963,8 @@ class DcpTestCase(ParametrizedTestCase):
                 assert fail_response['status'] == SUCCESS
                 assert fail_response['value'][0][1] == seqno
 
+        self.verification_seqno = 100
+
 
     """Request failover from n producers from n vbuckets
 
@@ -871,13 +974,14 @@ class DcpTestCase(ParametrizedTestCase):
     """
     def test_failover_log_n_producers_n_vbuckets(self):
 
-        n = 16
+        n = 2
         response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
         vb_ids = self.all_vbucket_ids()
         expected_seqnos = {}
         for id_ in vb_ids:
+            #print 'id', id_
             response = self.dcp_client.get_failover_log(id_)
             expected_seqnos[id_] = response['value'][0][0]
 
@@ -885,8 +989,10 @@ class DcpTestCase(ParametrizedTestCase):
             for i in range(n):
                 stream = "mystream{0}".format(i)
                 conn = DcpClient(self.host, self.port)
+                #print 'conn', conn
                 response = conn.open_producer(stream)
                 vbucket_id = id_
+                #print 'vbucket_id',vbucket_id
                 response = self.dcp_client.get_failover_log(vbucket_id)
                 assert response['value'][0][0] == expected_seqnos[vbucket_id]
 
@@ -994,7 +1100,11 @@ class DcpTestCase(ParametrizedTestCase):
     retrieve those items in order of sequence number.
     """
     def test_stream_request_with_ops(self):
-        self.mcd_client.stop_persistence()
+
+        #self.mcd_client.stop_persistence()
+
+
+
         doc_count = snap_end_seqno = 10
 
         for i in range(doc_count):
@@ -1009,7 +1119,15 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.status == SUCCESS
         stream.run()
 
+        Stats.wait_for_persistence(self.mcd_client)
+
+
+
         assert stream.last_by_seqno == doc_count
+
+        self.verification_seqno = doc_count
+
+
 
     """Receive mutation from dcp stream from a later sequence
 
@@ -1017,7 +1135,7 @@ class DcpTestCase(ParametrizedTestCase):
     retrieve items from sequence number 7 to 10 on (4 items).
     """
     def test_stream_request_with_ops_start_sequence(self):
-        self.mcd_client.stop_persistence()
+        #self.mcd_client.stop_persistence()
 
         for i in range(10):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
@@ -1045,6 +1163,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 10
         assert mutations == 3
 
+        self.verification_seqno = 10
     """Basic dcp stream request (Receives mutations/deletions)
 
     Stores 10 items into vbucket 0 and then deletes 5 of thos items. After
@@ -1052,7 +1171,7 @@ class DcpTestCase(ParametrizedTestCase):
     stream to retrieve those items in order of sequence number.
     """
     def test_stream_request_with_deletes(self):
-        self.mcd_client.stop_persistence()
+        #self.mcd_client.stop_persistence()
 
         for i in range(10):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
@@ -1079,6 +1198,8 @@ class DcpTestCase(ParametrizedTestCase):
         assert mutations == 5
         assert deletions == 5
         assert stream.last_by_seqno == 15
+
+        self.verification_seqno = 15
 
     """Stream request that reads from disk and memory
 
@@ -1190,6 +1311,8 @@ class DcpTestCase(ParametrizedTestCase):
         stream.run()
         assert stream.last_by_seqno == 20
 
+        self.verification_seqno = 20
+
     """Send stream requests for multiple
 
     Put some operations into four different vbucket. Then get the end sequence
@@ -1259,6 +1382,8 @@ class DcpTestCase(ParametrizedTestCase):
 
         assert end_seqno == stream.last_by_seqno
 
+        self.verification_seqno = end_seqno
+
 
     """
         Sends a stream request with start seqno greater than seqno of vbucket.  Expects
@@ -1308,6 +1433,7 @@ class DcpTestCase(ParametrizedTestCase):
                 # stream changes and we should reach last seqno
                 assert stream.last_by_seqno == n,\
                     "%s != %s" % (stream.last_by_seqno, n)
+                self.verification_seqno = stream.last_by_seqno
 
         [client.close() for client in clients]
 
@@ -1408,6 +1534,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.status == SUCCESS
         stream.run()
         assert stream.last_by_seqno == doc_count
+        self.verification_seqno = doc_count
 
     def test_stream_request_notifier_bad_uuid(self):
         """Wait for mutations from missing vb_uuid"""
@@ -1445,6 +1572,8 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == val
 
+        self.verification_seqno = 101
+
     def test_stream_request_prepend(self):
         """ stream prepended mutations """
         response = self.dcp_client.open_producer("mystream")
@@ -1464,6 +1593,8 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == val
 
+        self.verification_seqno = 101
+
     def test_stream_request_incr(self):
         """ stream mutations created by incr command """
         response = self.dcp_client.open_producer("mystream")
@@ -1481,6 +1612,8 @@ class DcpTestCase(ParametrizedTestCase):
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == '200'
+
+        self.verification_seqno = 101
 
 
     def test_stream_request_decr(self):
@@ -1501,6 +1634,8 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == '0'
 
+        self.verification_seqno = 101
+
     def test_stream_request_replace(self):
         """ stream mutations created by replace command """
         response = self.dcp_client.open_producer("mystream")
@@ -1518,6 +1653,8 @@ class DcpTestCase(ParametrizedTestCase):
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == 'value99'
+
+        self.verification_seqno = 101
 
 
     def test_stream_request_touch(self):
@@ -1537,6 +1674,8 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
 
+        self.verification_seqno = 2
+
     def test_stream_request_gat(self):
         """ stream mutations created by get-and-touch command """
 
@@ -1553,6 +1692,9 @@ class DcpTestCase(ParametrizedTestCase):
         responses = stream.run()
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
+
+        Stats.wait_for_persistence(self.mcd_client)
+        self.verification_seqno = 2
 
     def test_stream_request_client_per_vb(self):
         """ stream request muataions from each vbucket with a new client """
@@ -1572,6 +1714,7 @@ class DcpTestCase(ParametrizedTestCase):
             mutations = stream.run()
             try:
                 assert stream.last_by_seqno == 1000, stream.last_by_seqno
+                self.verification_seqno = 1000
             finally:
                 dcp_client.close()
 
@@ -1612,6 +1755,8 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 5
         assert required_ack, "received non flow-controlled stream"
 
+        self.verification_seqno = 5
+
     def test_flow_control_stats(self):
         """ verify flow control stats """
 
@@ -1648,6 +1793,8 @@ class DcpTestCase(ParametrizedTestCase):
 
         stream.run()
         assert stream.last_by_seqno == 3
+
+        self.verification_seqno = 3
 
     def test_flow_control_stream_closed(self):
         """ close and reopen stream during with flow controlled client"""
@@ -1698,6 +1845,8 @@ class DcpTestCase(ParametrizedTestCase):
         # verify stream closed
         assert last_seqno == end_seqno, "Got %s" % last_seqno
         assert required_ack, "received non flow-controlled stream"
+
+        self.verification_seqno = end_seqno
 
 
     def test_flow_control_reset_producer(self):
@@ -1818,6 +1967,9 @@ class DcpTestCase(ParametrizedTestCase):
             assert seqno == mutations,\
                 "%s != %s" % (seqno, mutations)
 
+            Stats.wait_for_persistence(self.mcd_client)
+            assert self.get_persisted_seq_no(vb) == seqno
+
 
     def test_consumer_producer_same_vbucket(self):
 
@@ -1840,6 +1992,8 @@ class DcpTestCase(ParametrizedTestCase):
 
         stream.run()
         assert stream.last_by_seqno == 1000
+
+        self.verification_seqno = 1000
         dcp_client2.close()
 
 
@@ -1862,6 +2016,8 @@ class DcpTestCase(ParametrizedTestCase):
            filter(lambda r: r['opcode']==CMD_MUTATION, responses)
         assert len(mutations) == n
         assert stream.last_by_seqno == 2*n
+
+        self.verification_seqno = 2*n
 
         for doc in mutations:
             assert doc['value'] == 'new-value'

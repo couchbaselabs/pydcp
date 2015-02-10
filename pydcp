@@ -13,12 +13,14 @@ from unit import *
 
 class PyDCP:
 
-    def __init__(self, suite, backend, hosts, port, xml, only_tc):
+    def __init__(self, suite, backend, hosts, port, ssh_username, ssh_password, xml, only_tc):
         self.suite = suite
         self.backend = backend
         self.hosts = hosts
         self.host = hosts[0]
         self.port = port
+        self.ssh_username = ssh_username
+        self.ssh_password = ssh_password
         self.xml = xml
         self.only_tc = only_tc
 
@@ -52,6 +54,7 @@ class PyDCP:
     def run_suite(self, testcase_klass):
         kwargs = self.__dict__
         kwargs['testcase_klass'] = testcase_klass
+
 
         suite = unittest.TestSuite()
         suite.addTest(ParametrizedTestCase.parametrize(**kwargs))
@@ -116,10 +119,13 @@ def main():
     parser.add_argument('-o', '--only',
                         help='specifiy the only test to run from a particular suite')
 
+    parser.add_argument('-u', '--ssh_username',  help='ssh_username for remote operations')
+    parser.add_argument('-p', '--ssh_password',  help='ssh_password for remote operations')
+
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    pyDcp = PyDCP(args.suite, backend, args.hosts, port, args.xml, args.only)
+    pyDcp = PyDCP(args.suite, backend, args.hosts, port, args.ssh_username, args.ssh_password, args.xml, args.only)
     pyDcp.run_test()
 
 if __name__ == "__main__":
