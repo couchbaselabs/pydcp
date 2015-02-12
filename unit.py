@@ -19,6 +19,7 @@ from threading import Thread
 import paramiko
 import os
 from subprocess import Popen, PIPE
+import datetime
 
 
 
@@ -84,7 +85,7 @@ class ParametrizedTestCase(unittest.TestCase):
         logging.info("Creating default bucket")
         assert self.rest_client.create_default_bucket(self.replica)
         Stats.wait_for_warmup(self.host, self.port)
-        self.dcp_client = DcpClient(self.host, self.port)
+        self.dcp_client = DcpClient(self.host, self.port, timeout=100)
         self.mcd_client = McdClient(self.host, self.port)
 
     def couchbase_backend_teardown(self):
@@ -1164,6 +1165,74 @@ class DcpTestCase(ParametrizedTestCase):
         assert mutations == 3
 
         self.verification_seqno = 10
+
+
+
+
+
+    def set_keys_with_timestamp(self, count):
+
+        for i in range(count):
+            self.mcd_client.set('key' + str(i), 0, 0, str(time.time() ), 0)
+            time.sleep(0.010)
+
+
+    """ Concurrent set keys and stream them. Verify that the time between new arrivals
+    is not greater than 10 seconds
+    """
+
+
+    def test_mutate_stream_request_concurrent_with_ops(self):   # ******
+
+        doc_count = snap_end_seqno = 10000
+        t = Thread( target=self.set_keys_with_timestamp, args=(doc_count,))
+        t.start()
+
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        mutations = 0
+        last_by_seqno = 0
+        stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0, 0)
+        assert stream.status == SUCCESS
+        results = stream.run()
+
+
+        # remove response like this
+        # {'snap_end_seqno': 30, 'arrival_time': 1423699992.195518, 'flag': 'memory', 'opcode': 86, 'snap_start_seqno': 30, 'vbucket': 0}
+        resultsWithoutSnap = [x for x in results if 'key' in x]
+
+
+
+        pauses = []
+        i = 1
+        while i <  len(resultsWithoutSnap):
+            if resultsWithoutSnap[i]['arrival_time'] - resultsWithoutSnap[i-1]['arrival_time'] > 10:
+                pauses.append( 'Key {0} set at {1} was streamed {2:.2f} seconds after the previous key was received. '.
+                               format( resultsWithoutSnap[i]['key'],
+                                       datetime.datetime.fromtimestamp(float(resultsWithoutSnap[i-1]['value'])).strftime('%H:%M:%S'),
+                     resultsWithoutSnap[i]['arrival_time'] - resultsWithoutSnap[i-1]['arrival_time'],
+                     datetime.datetime.fromtimestamp(float(resultsWithoutSnap[i-1]['value'])).strftime('%H:%M:%S')) )
+            i = i + 1
+
+
+        #print 'Number of pause delays:', len(pauses)
+        if len(pauses) > 0:
+            if len(pauses) < 20:   # keep the output manageable
+                for i in pauses:
+                    print i
+            else:
+                for i in range(20):
+                    print pauses[i]
+
+            assert False, 'There were pauses greater than 10 seconds in receiving stream contents'
+
+        assert stream.last_by_seqno == doc_count
+
+
+
+
     """Basic dcp stream request (Receives mutations/deletions)
 
     Stores 10 items into vbucket 0 and then deletes 5 of thos items. After

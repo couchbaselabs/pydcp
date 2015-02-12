@@ -286,6 +286,8 @@ class DcpStream(object):
                         "ERROR: vbucket (%s) stream stopped receiving mutations "\
                         % self.vbucket
                     continue
+                # add metadata for timing analysis
+                r['arrival_time'] = time.time()
                 responses.append(r)
 
                 if 'status' in r and r['status'] == 0xff:
