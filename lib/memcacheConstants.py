@@ -46,7 +46,7 @@ CMD_ACK              = 0x5d
 CMD_FLOW_CONTROL     = 0x5e
 CMD_UPR_NOOP         = 0x5c
 CMD_UPR_ACK          = 0x5d
-CMD_FLOW_CONTROL     = 0x5e
+CMD_CONTROL     = 0x5e
 
 # SASL stuff
 CMD_SASL_LIST_MECHS = 0x20
@@ -103,6 +103,11 @@ CMD_DELETE_VBUCKET = 0x3f
 CMD_GET_LOCKED = 0x94
 
 CMD_SYNC = 0x96
+
+
+CMD_SET_DRIFT_COUNTER_STATE = 0xc1
+CMD_GET_ADJUSTED_TIME = 0xc2
+
 
 # event IDs for the SYNC command responses
 CMD_SYNC_EVENT_PERSISTED = 1
@@ -191,6 +196,9 @@ GETL_PKT_FMT = ">I"
 
 # 2 bit integer.  :/
 VB_SET_PKT_FMT = ">I"
+
+SET_DRIFT_COUNTER_STATE_REQ_FMT = '>qB'
+GET_ADJUSTED_TIME_RES_FMT = '>Q'
 
 MAGIC_BYTE = 0x80
 REQ_MAGIC_BYTE = 0x80

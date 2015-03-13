@@ -63,6 +63,14 @@ class DcpClient(MemcachedClient):
         op = FlowControl(buffer_size)
         return self._handle_op(op)
 
+
+    def general_control(self, key, value):
+        """ sent to notify producer how much data a client is able to receive
+            while streaming mutations"""
+
+        op = GeneralControl(key, value)
+        return self._handle_op(op)
+
     def ack(self, nbytes):
         """ sent to notify producer number of bytes client has received"""
 
@@ -406,8 +414,20 @@ class StreamRequest(Operation):
         self.snap_start = snap_start
         self.snap_end = snap_end
 
+    def parse_extended_meta_data(self, extended_meta_data):
+        # extended metadata is described here
+        # https://github.com/couchbaselabs/dcp-documentation/blob/master/documentation/commands/extended_meta/ext_meta_ver1.md
+        # this parsing assumes a fixed format with respect to adjusted time and conflict resolution mode
+        version, op1, op1_length, adjusted_time, op2, op2_length, conflict_resolution_mode =  \
+            struct.unpack(">BBHQBHB", extended_meta_data)
+        return adjusted_time, conflict_resolution_mode
+
 
     def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+
+        adjusted_time = None
+        conflict_resolution_mode = 0
+
         if opcode == CMD_STREAM_REQ:
 
             response = { 'opcode' : opcode,
@@ -444,7 +464,10 @@ class StreamRequest(Operation):
             by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
                 struct.unpack(">QQIIIHB", body[0:31])
             key = body[31:31+keylen]
-            value = body[31+keylen:]
+            value = body[31+keylen: len(body)- ext_meta_len]
+            if ext_meta_len > 0:
+                adjusted_time, conflict_resolution_mode = self.parse_extended_meta_data(body[len(body)- ext_meta_len:])
+
             response = { 'opcode'     : opcode,
                          'vbucket'    : status,
                          'by_seqno'   : by_seqno,
@@ -452,19 +475,29 @@ class StreamRequest(Operation):
                          'flags'      : flags,
                          'expiration' : exp,
                          'lock_time'  : lock_time,
+                         'nmeta'      : ext_meta_len,
                          'nru'        : nru,
                          'key'        : key,
-                         'value'      : value }
+                         'value'      : value,
+                         'adjusted_time': adjusted_time,
+                         'conflict_resolution_mode': conflict_resolution_mode}
 
         elif opcode == CMD_DELETION:
             by_seqno, rev_seqno, ext_meta_len = \
                 struct.unpack(">QQH", body[0:18])
             key = body[18:18+keylen]
+
+            if ext_meta_len > 0:
+                adjusted_time, conflict_resolution_mode = \
+                    self.parse_extended_meta_data(body[len(body)- ext_meta_len:])
+
             response = { 'opcode'     : opcode,
                          'vbucket'    : status,
                          'by_seqno'   : by_seqno,
                          'rev_seqno'  : rev_seqno,
-                         'key'        : key }
+                         'key'        : key,
+                         'adjusted_time': adjusted_time,
+                        ' conflict_resolution_mode': conflict_resolution_mode}
 
         elif opcode == CMD_SNAPSHOT_MARKER:
 
@@ -522,7 +555,7 @@ class FlowControl(Operation):
     """ FlowControl spec """
 
     def __init__(self, buffer_size):
-        opcode = CMD_FLOW_CONTROL
+        opcode = CMD_CONTROL
         Operation.__init__(self, opcode,
                            key = "connection_buffer_size",
                            value = str(buffer_size))
@@ -532,6 +565,23 @@ class FlowControl(Operation):
                      'status'        : status,
                      'body'          : body}
         return response
+
+
+class GeneralControl(Operation):
+
+
+    def __init__(self, key, value):
+        opcode = CMD_CONTROL
+        Operation.__init__(self, opcode,
+                           key,
+                           value)
+
+    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+        response = { 'opcode'        : opcode,
+                     'status'        : status,
+                     'body'          : body}
+        return response
+
 
 class Ack(Operation):
     """ Ack spec """

@@ -466,6 +466,13 @@ class MemcachedClient(object):
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
+    def set_time_drift_counter_state(self, vbucket, drift, state):
+        """Get the value for a given key within the memcached server."""
+        self.vbucketId = vbucket
+        extras = struct.pack(memcacheConstants.SET_DRIFT_COUNTER_STATE_REQ_FMT, drift, state)
+        return self._doCmd(memcacheConstants.CMD_SET_DRIFT_COUNTER_STATE, '', '', extras)
+
+
     def _build_sync_payload(self, flags, keyspecs):
         payload = struct.pack(">I", flags)
         payload += struct.pack(">H", len(keyspecs))

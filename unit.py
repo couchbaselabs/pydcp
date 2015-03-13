@@ -78,6 +78,18 @@ class ParametrizedTestCase(unittest.TestCase):
         self.mcd_client.close()
 
     def couchbase_backend_setup(self):
+
+        # this is a bit of a hack for test cases that use the drift counter and get adjusted time request. These are not
+        # supported for the "normal" client so we sed the rbac.json to update their permissions. Windows is not supported
+
+        if self.backend != 'dev':
+            self._execute_command('/etc/init.d/couchbase-server stop')
+            CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
+            self._execute_command(CMD)
+            time.sleep(10)
+            self._execute_command('/etc/init.d/couchbase-server start')
+            time.sleep(20)
+
         self.rest_client = RestClient(self.host, port=self.rest_port)
         for bucket in self.rest_client.get_all_buckets():
             logging.info("Deleting bucket %s" % bucket)
@@ -133,7 +145,10 @@ class ParametrizedTestCase(unittest.TestCase):
 
             stdout.close()
             stderr.close()
-            return output[0]
+            if len(output) > 0:
+               return output[0]
+            else:
+                return None
 
 
 
@@ -2090,6 +2105,67 @@ class DcpTestCase(ParametrizedTestCase):
 
         for doc in mutations:
             assert doc['value'] == 'new-value'
+
+
+
+
+    # Check the scenario where time is not synced but we still request extended metadata. There should be no
+    # adjusted time but the mutations should appear. This test currently fails - MB-13933
+
+    def test_request_extended_meta_data_when_vbucket_not_time_synced(self):
+        n = 5
+
+        response = self.dcp_client.open_producer("producer")
+        response = self.dcp_client.general_control('enable_ext_metadata', 'true')
+        assert response['status'] == SUCCESS
+
+        for i in xrange(n):
+            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+        stream = self.dcp_client.stream_req(0, 0, 0, n, 0)
+        responses = stream.run()
+        assert stream.last_by_seqno == n,\
+               'Sequence number mismatch. Expect {0}, actual {1}'.format(n, stream.last_by_seqno)
+
+
+
+
+    """ Tests the for the presence of the adjusted time and conflict resolution mode fields in the mutation and delete
+        commands.
+    """
+
+    def test_conflict_resolution_and_adjusted_time(self):
+
+
+        n = 5
+
+        response = self.dcp_client.open_producer("producer")
+        response = self.dcp_client.general_control('enable_ext_metadata', 'true')
+        assert response['status'] == SUCCESS
+
+        # set time synchronization
+        self.mcd_client.set_time_drift_counter_state(0,0,1)
+
+
+        for i in xrange(n):
+            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+
+
+        stream = self.dcp_client.stream_req(0, 0, 0, n, 0)
+        responses = stream.run()
+
+        assert stream.last_by_seqno == n,\
+               'Sequence number mismatch. Expect {0}, actual {1}'.format(n, stream.last_by_seqno)
+
+        for i in responses:
+            if i['opcode'] == CMD_MUTATION:
+                assert i['nmeta'] > 0, 'nmeta is 0'
+                assert i['conflict_resolution_mode'] == 1, 'Conflict resolution mode not set'
+                assert i['adjusted_time'] > 0, 'Invalid adjusted time {0}'.format(i['adjusted_time'] )
+
+
+
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
