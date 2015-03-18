@@ -418,8 +418,35 @@ class StreamRequest(Operation):
         # extended metadata is described here
         # https://github.com/couchbaselabs/dcp-documentation/blob/master/documentation/commands/extended_meta/ext_meta_ver1.md
         # this parsing assumes a fixed format with respect to adjusted time and conflict resolution mode
-        version, op1, op1_length, adjusted_time, op2, op2_length, conflict_resolution_mode =  \
-            struct.unpack(">BBHQBHB", extended_meta_data)
+
+
+
+        adjusted_time = 0
+        conflict_resolution_mode = 0
+
+
+        version, op, op_length =struct.unpack(">BBH", extended_meta_data[0:4])
+
+        if op == META_ADJUSTED_TIME:
+             adjusted_time = struct.unpack(">Q", extended_meta_data[4:12])[0]
+
+        elif op == META_CONFLICT_RESOLUTION_MODE:
+           conflict_resolution_mode = struct.unpack(">B", extended_meta_data[4:5])[0]
+        pos = 1 + 1 + 2 + op_length    # version field, op id + op value
+
+
+
+        if len(extended_meta_data) > pos:
+
+            # more to parse
+            op, op_length =struct.unpack(">BH", extended_meta_data[pos:pos+3])
+            pos = pos + 3
+            if op == META_ADJUSTED_TIME:
+                 adjusted_time = struct.unpack(">Q", extended_meta_data[pos:pos+4])[0]
+
+            elif op == META_CONFLICT_RESOLUTION_MODE:
+               conflict_resolution_mode = struct.unpack(">B", extended_meta_data[pos:pos+1])[0]
+
         return adjusted_time, conflict_resolution_mode
 
 

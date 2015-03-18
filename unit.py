@@ -82,7 +82,7 @@ class ParametrizedTestCase(unittest.TestCase):
         # this is a bit of a hack for test cases that use the drift counter and get adjusted time request. These are not
         # supported for the "normal" client so we sed the rbac.json to update their permissions. Windows is not supported
 
-        if self.backend != 'dev':
+        if self.backend != RemoteServer.DEV:
             self._execute_command('/etc/init.d/couchbase-server stop')
             CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
             self._execute_command(CMD)
