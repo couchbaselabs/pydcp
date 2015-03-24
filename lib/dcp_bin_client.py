@@ -419,8 +419,6 @@ class StreamRequest(Operation):
         # https://github.com/couchbaselabs/dcp-documentation/blob/master/documentation/commands/extended_meta/ext_meta_ver1.md
         # this parsing assumes a fixed format with respect to adjusted time and conflict resolution mode
 
-
-
         adjusted_time = 0
         conflict_resolution_mode = 0
 

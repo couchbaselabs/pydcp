@@ -82,6 +82,7 @@ class ParametrizedTestCase(unittest.TestCase):
         # this is a bit of a hack for test cases that use the drift counter and get adjusted time request. These are not
         # supported for the "normal" client so we sed the rbac.json to update their permissions. Windows is not supported
 
+
         if self.backend != RemoteServer.DEV:
             self._execute_command('/etc/init.d/couchbase-server stop')
             CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
@@ -97,7 +98,7 @@ class ParametrizedTestCase(unittest.TestCase):
         logging.info("Creating default bucket")
         assert self.rest_client.create_default_bucket(self.replica)
         Stats.wait_for_warmup(self.host, self.port)
-        self.dcp_client = DcpClient(self.host, self.port, timeout=100)
+        self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
 
     def couchbase_backend_teardown(self):
@@ -120,7 +121,7 @@ class ParametrizedTestCase(unittest.TestCase):
         else:
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            print 'connecting to {0} with username : {1} password: {2}'.format(self.host, self.ssh_username, self.ssh_password)
+            #print 'connecting to {0} with username : {1} password: {2}'.format(self.host, self.ssh_username, self.ssh_password)
             try:
                 ssh_client.connect(hostname=self.host, username=self.ssh_username, password=self.ssh_password)
             except paramiko.AuthenticationException:
