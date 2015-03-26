@@ -48,8 +48,11 @@ class PyDCP:
                     sys.exit(0)
             self.run_suite(RebTestCase)
         else:
-            print "Invalid testsuite type '%s'" % self.suite
-            sys.exit(0)
+            try:
+                self.run_suite(eval(self.suite))
+            except NameError:
+                print "Invalid testsuite type '%s'" % self.suite
+                sys.exit(0)
 
     def run_suite(self, testcase_klass):
         kwargs = self.__dict__

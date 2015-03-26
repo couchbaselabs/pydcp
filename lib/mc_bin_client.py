@@ -235,6 +235,20 @@ class MemcachedClient(object):
         self._mutate(memcacheConstants.CMD_SET, key, exp, flags,
             oldVal, val)
 
+
+    def create_checkpoint(self, vbucket= -1):
+        return self._doCmd(memcacheConstants.CMD_CREATE_CHECKPOINT, '', '')
+
+    def compact_db(self, key, vbucket, purge_before_ts, purge_before_seq, drop_deletes):
+        self._set_vbucket(key, vbucket)
+        self.vbucketId = 0
+        # some filler bytes were needed
+        return self._doCmd(memcacheConstants.CMD_COMPACT_DB, '', '',
+                           struct.pack('>QQBBHL', purge_before_ts, purge_before_seq, drop_deletes, 0, 0, 0))
+
+
+
+
     def touch(self, key, exp, vbucket= -1):
         """Touch a key in the memcached server."""
         self._set_vbucket(key, vbucket)

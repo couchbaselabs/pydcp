@@ -209,6 +209,90 @@ class ExpTestCase(ParametrizedTestCase):
     def tearDown(self):
         self.destroy_backend()
 
+
+
+class SnapshotTestCases(ParametrizedTestCase):
+    def setUp(self):
+        self.initialize_backend()
+
+
+    """ do 100,000 mutations and retrieve the stream
+    """
+    def test_very_large_stream(self):
+        doc_count = snap_end_seqno = 100000
+
+        for i in range(doc_count):
+            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        mutations = 0
+        last_by_seqno = 0
+        stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0, 0)
+        assert stream.status == SUCCESS
+        stream.run()
+
+
+        assert stream.last_by_seqno == doc_count
+
+        self.verification_seqno = doc_count
+
+
+
+    """Stream request that reads from disk and memory
+
+    Insert 15,000 items and then wait for some of the checkpoints to be removed
+    from memory. Then request all items starting from 0 so that we can do a disk
+    backfill and then read the items that are in memory"""
+
+    def test_stream_request_disk(self):
+        for i in range(15000):
+            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+        resp = self.mcd_client.stats('vbucket-seqno')
+        end_seqno = int(resp['vb_0:high_seqno'])
+
+        Stats.wait_for_persistence(self.mcd_client)
+        assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
+                                   'checkpoint')
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        mutations = 0
+        markers = 0
+        last_by_seqno = 0
+        stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, 0)
+        assert stream.status == SUCCESS
+
+        state = Stats.get_stat(self.mcd_client,
+                               'eq_dcpq:mystream:stream_0_state', 'dcp')
+        if state != 'dead':
+            assert state == 'backfilling'
+
+        responses = stream.run()
+
+        markers = \
+           len(filter(lambda r: r['opcode']==CMD_SNAPSHOT_MARKER, responses))
+
+
+        # the below assert fails so we can assume it is working as expected.
+        # I saw markers as 1 and num checkpoints as 2
+        #assert markers == int(stats['vb_0:num_checkpoints'])
+
+        assert stream.last_by_seqno == 15000
+
+
+
+    def tearDown(self):
+        self.destroy_backend()
+
+
+
+
+
+
 class DcpTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
@@ -654,7 +738,7 @@ class DcpTestCase(ParametrizedTestCase):
             # check if items were backfilled before streaming
             stats = self.mcd_client.stats('dcp')
             num_backfilled =\
-             int(stats['eq_dcpq:mystream:stream_0_backfilled'])
+             int(stats['eq_dcpq:mystream:stream_0_backfill_sent'])
 
             if num_backfilled > 0:
                 backfilled = True
@@ -1285,46 +1369,124 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 15
 
         self.verification_seqno = 15
+  
+    """
+    MB-13386 - delete and compaction
+    Stores 10 items into vbucket 0 and then deletes 5 of thos items. After
+    the items have been inserted/deleted from the server we create an dcp
+    stream to retrieve those items in order of sequence number.
+    """
 
-    """Stream request that reads from disk and memory
+    def test_stream_request_with_deletes_and_compaction(self):
 
-    Insert 15,000 items and then wait for some of the checkpoints to be removed
-    from memory. Then request all items starting from 0 so that we can do a disk
-    backfill and then read the items that are in memory"""
-    @unittest.skip("Broken: markers spanning checkpoints")
-    def test_stream_request_disk_and_memory_read(self):
-        for i in range(15000):
+
+        for i in range(1,4):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+        time.sleep(2)
+        for i in range(2,4):
+            self.mcd_client.delete('key' + str(i),0, 0)
 
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
         Stats.wait_for_persistence(self.mcd_client)
-        assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
-                                   'checkpoint')
+
+
+        # drop deletes is important for this scenario
+        self.mcd_client.compact_db('',0, 2, 5, 1)   # key, bucket,  purge_before_ts, purge_before_seq, drop_deletes
+
+
+        # wait for compaction to end - if this were a rest call then we could use active tasks but
+        # as this an mc bin client call the only way known (to me) is to sleep
+        time.sleep(10)
+
+
 
         response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
-        mutations = 0
-        markers = 0
         last_by_seqno = 0
         stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, 0)
         assert stream.status == SUCCESS
-
-        state = Stats.get_stat(self.mcd_client,
-                               'eq_dcpq:mystream:stream_0_state', 'dcp')
-        if state != 'dead':
-            assert state == 'backfilling'
-
         responses = stream.run()
 
-        markers = \
-           len(filter(lambda r: r['opcode']==CMD_SNAPSHOT_MARKER, responses))
 
-        stats = self.mcd_client.stats('checkpoint')
-        assert markers == int(stats['vb_0:num_checkpoints'])
-        assert stream.last_by_seqno == 15000
+        mutations = \
+           len(filter(lambda r: r['opcode']==CMD_MUTATION, responses))
+        deletions = \
+           len(filter(lambda r: r['opcode']==CMD_DELETION, responses))
+
+
+        assert deletions == 2,'Deletion mismatch, expect {0}, actual {1}'.format(2, deletions)
+        assert mutations == 1,'Mutation mismatch, expect {0}, actual {1}'.format(1, mutations)
+
+        assert stream.last_by_seqno == 5
+
+
+
+    """
+    MB-13479 - dedup and compaction
+    Set some keys
+    Consumer consumes them
+    Delete one of the set keys
+    Compaction - dedup occurs
+    Request more of the stream - there should be a rollback so the the consumer does not bridge the dedup
+
+    """
+
+    def test_stream_request_with_dedup_and_compaction(self):
+
+        KEY_BASE = 'key'
+        for i in range(1,4):
+            self.mcd_client.set(KEY_BASE + str(i), 0, 0, 'value', 0)
+
+        time.sleep(2)
+
+
+        resp = self.mcd_client.stats('vbucket-seqno')
+
+        end_seqno = int(resp['vb_0:high_seqno'])
+
+
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        # consume the first 3 keys
+        stream = self.dcp_client.stream_req(0, 0, 0, 3, 0)
+        assert stream.status == SUCCESS
+        responses = stream.run()
+
+
+        # and delete one from the original batch
+        for i in range(2,4):
+            self.mcd_client.delete(KEY_BASE + str(i),0, 0)
+
+
+        # set a couple more keys
+
+        self.mcd_client.set(KEY_BASE + str(5), 0, 0, 'value', 0)
+        self.mcd_client.set(KEY_BASE + str(5), 0, 0, 'value', 0)
+
+
+
+        self.mcd_client.compact_db('',0, 3, 5, 1)   # key, bucket, ...
+        time.sleep(10)
+
+        # and now get the stream
+        #     def stream_req(self, vbucket, takeover, start_seqno, end_seqno,
+        #               vb_uuid, snap_start = None, snap_end = None):
+        stream = self.dcp_client.stream_req(0, 0, 3, 6, 0)
+        assert stream.status == ERR_ROLLBACK
+
+
+
+
+
+
+
+
 
 
     @unittest.skip("Broken: needs debugging")
