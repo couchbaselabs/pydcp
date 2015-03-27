@@ -22,7 +22,6 @@ from subprocess import Popen, PIPE
 import datetime
 
 
-
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
 
 class RemoteServer:
@@ -2328,7 +2327,68 @@ class DcpTestCase(ParametrizedTestCase):
                 assert i['adjusted_time'] > 0, 'Invalid adjusted time {0}'.format(i['adjusted_time'] )
 
 
+    # This test will insert 100k items into a server,
+    # Sets up a stream request. While streaming, will force the
+    # server to crash. Reconnect stream and ensure that the
+    # number of mutations received is as expected.
+    def test_stream_req_with_server_crash(self):
+        doc_count = 100000
 
+        for i in range(doc_count):
+            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+        Stats.wait_for_persistence(self.mcd_client)
+
+        by_seqno_list = []
+        mutation_count = []
+
+        def setup_a_stream(start, end, vb_uuid, snap_start, snap_end, by_seqnos, mutations):
+            response = self.dcp_client.open_producer("mystream")
+            assert response['status'] == SUCCESS
+
+            stream = self.dcp_client.stream_req(0, 0, start, end, vb_uuid,
+                                                snap_start, snap_end)
+            assert stream.status == SUCCESS
+            stream.run()
+            by_seqnos.append(stream.last_by_seqno)
+            mutations.append(stream.mutation_count)
+
+        def kill_memcached():
+            self._execute_command('killall -9 memcached')
+
+        response = self.mcd_client.stats('failovers')
+        vb_uuid = long(response['vb_0:0:id'])
+
+        start = 0
+        end = doc_count
+        proc1 = Thread(target=setup_a_stream,
+                       args=(start, end, vb_uuid, start, start, by_seqno_list, mutation_count))
+
+        proc2 = Thread(target=kill_memcached,
+                       args=())
+
+        proc1.start()
+        proc2.start()
+        proc2.join()
+        proc1.join()
+
+        # wait for server to be up
+        Stats.wait_for_warmup(self.host, self.port)
+        self.dcp_client = DcpClient(self.host, self.port)
+        self.mcd_client = McdClient(self.host, self.port)
+
+        response = self.mcd_client.stats('failovers')
+        vb_uuid = long(response['vb_0:1:id'])
+
+        assert len(by_seqno_list)
+        start = by_seqno_list[0]
+        end = doc_count
+        setup_a_stream(start, end, vb_uuid, start, start, by_seqno_list, mutation_count)
+
+        mutations_received_stage_one = mutation_count[0]
+        mutations_received_stage_two = mutation_count[1]
+
+        assert (mutations_received_stage_one + mutations_received_stage_two == doc_count)
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):

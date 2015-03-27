@@ -248,6 +248,7 @@ class DcpStream(object):
         self.rollback_seqno = response.get('seqno')
         self.opcode = response.get('opcode')
         self.last_by_seqno = 0
+        self.mutation_count = 0
         self._ended = False
 
     def next_response(self):
@@ -269,6 +270,7 @@ class DcpStream(object):
                      "ERROR: Out of order response on vbucket %s: %s"\
                          % (response['vbucket'], response)
                 self.last_by_seqno = response['by_seqno']
+                self.mutation_count += 1
 
             if response['opcode'] == CMD_STREAM_END:
                 self._ended = True
