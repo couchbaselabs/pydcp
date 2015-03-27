@@ -2795,3 +2795,25 @@ class RebTestCase(ParametrizedTestCase):
 
         # stream after addback
         stream_and_failover()
+
+    # The following test starts with a cluster of 2 nodes.
+    # Issue mutations to a single vbucket.
+    # Wait for flushers to settle, and check items consistency
+    def test_items_on_single_vbucket(self):
+        nodeB = self.hosts[1]
+        assert self.rest_client.rebalance([nodeB], [])
+        assert self.rest_client.wait_for_rebalance(600)
+        replica_vbs = self.all_vbucket_ids('replica')
+        assert len(replica_vbs) > 0, "No replica vbuckets!"
+
+        doc_count = 500000
+        active_vbs = self.all_vbucket_ids('active')
+        vb = active_vbs[0]
+        self.mcd_reset(vb)
+        [self.mcd_client.set('key' + str(i), 0, 0, 'value', vb)\
+                                         for i in range(doc_count)]
+
+        time.sleep(5)
+        resp = self.mcd_client.stats()
+        assert resp['vb_active_curr_items'] == '500000'
+        assert resp['vb_replica_curr_items'] == '500000'
