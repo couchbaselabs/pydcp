@@ -2390,6 +2390,40 @@ class DcpTestCase(ParametrizedTestCase):
 
         assert (mutations_received_stage_one + mutations_received_stage_two == doc_count)
 
+    def test_track_mem_usage_with_repetetive_stream_req(self):
+        doc_count = 100000
+
+        for i in range(doc_count):
+            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+
+        Stats.wait_for_persistence(self.mcd_client)
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        resp = self.mcd_client.stats()
+        memUsed_before = float(resp['mem_used'])
+
+        start = 0
+        end = doc_count
+        snap_start = snap_end = start
+
+        response = self.mcd_client.stats('failovers')
+        vb_uuid = long(response['vb_0:0:id'])
+
+        for i in range(0, 500):
+            stream = self.dcp_client.stream_req(0, 0, start, end, vb_uuid,
+                    snap_start, snap_end)
+            assert stream.status == SUCCESS
+            self.dcp_client.close_stream(0)
+
+        time.sleep(5)
+
+        resp = self.mcd_client.stats()
+        memUsed_after = float(resp['mem_used'])
+
+        assert (memUsed_after < ((0.1 * memUsed_before) + memUsed_before))
+
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
