@@ -209,6 +209,244 @@ class ExpTestCase(ParametrizedTestCase):
         self.destroy_backend()
 
 
+""" Disconnect and reconnect test cases
+"""
+
+
+class DisconnectReconnectTestCases(ParametrizedTestCase):
+
+    MUTATION_COUNT = 1000
+
+    def setUp(self):
+        self.initialize_backend()
+
+
+            # Set 'count' keys on the given vbuckets
+    def set_keys(self,count):
+        for i in range(count):
+            print 'setting key', i
+            self.mcd_client.set('key' + str(i), 0, 0, str(time.time() ), 0)
+
+        """
+
+        # start the mutating
+        mutation_thread = Thread( target=self.set_keys, args=(STREAM_START_STOP_COUNT,))
+        mutation_thread.start()
+        mutation_thread.join()
+        """
+
+
+    # Do 1,000 mutations and stream them one at a time
+    def test_stream_one_mutation_at_a_time(self):
+
+
+        STREAM_START_STOP_COUNT = 1000
+        for i in range(STREAM_START_STOP_COUNT):
+            self.mcd_client.set('key' + str(i), 0, 0, str(time.time() ), 0)
+
+
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        stream = self.dcp_client.stream_req(0, 0, 0, STREAM_START_STOP_COUNT,0)
+
+        for i in range(STREAM_START_STOP_COUNT):
+
+            response = self.mcd_client.stats('failovers')
+            ##vb_uuid = long(response['vb_0:0:id'])
+            vb_seq = long(response['vb_0:0:seq'])
+
+
+            assert stream.status == SUCCESS, 'Unexpected status {0}'.format( stream.status)
+            stream.run(i+1)
+
+            assert stream.last_by_seqno == i+1, 'Unexpected last seq no {0}'.format( stream.last_by_seqno)
+            self.dcp_client.close_stream(0)
+
+
+
+
+    # Do 1,000 mutations and stream each one on a separate stream
+    def test_many_one_mutation_streams(self):
+
+
+        STREAM_START_STOP_COUNT = 1000
+        for i in range(STREAM_START_STOP_COUNT):
+            self.mcd_client.set('key' + str(i), 0, 0, str(time.time() ), 0)
+
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        for i in range(STREAM_START_STOP_COUNT):
+
+            response = self.mcd_client.stats('failovers')
+            vb_uuid = long(response['vb_0:0:id'])
+            #vb_seq = long(response['vb_0:0:seq'])
+
+
+            stream = self.dcp_client.stream_req(0, 0, i, i+1,  vb_uuid)
+            assert stream.status == SUCCESS, 'Unexpected status {0}'.format( stream.status)
+            stream.run(i+1)
+
+            assert stream.last_by_seqno == i+1, 'Unexpected last seq no {0}'.format( stream.last_by_seqno)
+            self.dcp_client.close_stream(0)
+
+
+
+    # Do 1,000 mutations and stream each one on a separate stream
+    def test_many_connects_and_disconnects(self):
+
+
+        CONNECT_COUNT = 1000
+        for i in range(10):
+            self.mcd_client.set('key' + str(i), 0, 0, str(time.time() ), 0)
+
+
+        for i in range(CONNECT_COUNT):
+            dcp_client = DcpClient(self.host, self.port)
+            response = dcp_client.open_producer("mystream" + str(i))
+            assert response['status'] == SUCCESS
+
+
+            response = self.mcd_client.stats('failovers')
+            vb_uuid = long(response['vb_0:0:id'])
+            vb_seq = long(response['vb_0:0:seq'])
+
+
+            stream = dcp_client.stream_req(0, 0, 0, 10, 0)
+            assert stream.status == SUCCESS, 'Unexpected status {0}'.format( stream.status)
+            stream.run(10)
+
+            assert stream.last_by_seqno == 10, 'Unexpected last seq no {0}'.format( stream.last_by_seqno)
+            dcp_client.close_stream(0)
+            dcp_client.close()
+
+
+
+
+
+    def tearDown(self):
+        self.destroy_backend()
+
+
+
+
+""" A class which contains test cases which exercise streams on all available vbuckets and also does
+    multiple clients
+"""
+
+class MultiClientTestCases(ParametrizedTestCase):
+
+    MUTATION_COUNT = 1000
+
+    def setUp(self):
+        self.initialize_backend()
+
+
+
+    # Set 'count' keys on the given vbuckets
+    def set_keys_on_all_vbuckets(self,count, vbuckets):
+        for i in range(count):
+            for j in range(vbuckets):
+                self.mcd_client.set('key' + str(i), 0, 0, str(time.time() ), j)
+                #time.sleep(0.010)
+
+
+
+
+
+
+    # consume the streams for all vbuckets. Index is a unique stream identifier
+
+    def consume_all_streams(self, dcp_client, vbucket_count, index=1):
+
+
+        response = dcp_client.open_producer("mystream" + str(index))
+        assert response['status'] == SUCCESS
+
+
+        for i in range(vbucket_count):
+            stream = dcp_client.stream_req(i, 0, 0, MultiClientTestCases.MUTATION_COUNT, 0)
+            assert stream.status == SUCCESS
+            stream.run(MultiClientTestCases.MUTATION_COUNT)
+            assert stream.last_by_seqno == MultiClientTestCases.MUTATION_COUNT
+
+
+
+    """ This is the main routine - takes as parameter the number of clients and vbuckets and
+        verifies the clients receive streams.
+    """
+    def vary_by_clients_streams_and_vbuckets(self, client_count, vbucket_count):
+
+
+
+        dcp_clients = []
+        for i in range(client_count):
+            dcp_clients.append( DcpClient(self.host, self.port) )
+
+
+
+
+        # concurrently set the keys
+        mutation_thread = Thread( target=self.set_keys_on_all_vbuckets,
+                                  args=(MultiClientTestCases.MUTATION_COUNT,vbucket_count,))
+        mutation_thread.start()
+        # don't do a join, let the mutations run concurrently with the stream
+
+        consumer_threads = []
+        for i in range(client_count):
+            consumer_threads.append( Thread( target=self.consume_all_streams,
+                                  args=( dcp_clients[i],vbucket_count, i)) )
+
+        for i in consumer_threads:
+            i.start()
+
+
+        for i in consumer_threads:
+            i.join()
+
+
+        # any assertions will be done in the thread
+
+
+    def test_many_clients_1_vbucket(self):
+        self.vary_by_clients_streams_and_vbuckets(5, 1)
+
+
+
+    def test_1_client_1024_vbuckets(self):
+        self.vary_by_clients_streams_and_vbuckets(1, 1024)
+
+
+
+    def test_5_clients_1024_vbuckets(self):
+        self.vary_by_clients_streams_and_vbuckets(5, 1024)
+
+    @unittest.skip("invalid: dont support 20 clients")
+    def test_20_clients_1024_vbuckets(self):
+        self.vary_by_clients_streams_and_vbuckets(20, 1024)
+
+
+
+    def tearDown(self):
+        self.destroy_backend()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class SnapshotTestCases(ParametrizedTestCase):
     def setUp(self):
@@ -301,7 +539,10 @@ class DcpTestCase(ParametrizedTestCase):
 
         if self.verification_seqno is not None:
             Stats.wait_for_persistence(self.mcd_client)
-            assert self.verification_seqno == self.get_persisted_seq_no(self.verification_vb)
+            persisted_seqno = self.get_persisted_seq_no(self.verification_vb)
+            assert self.verification_seqno == persisted_seqno, \
+                  'invalid persisted sequence number. Expected {0}, actual {1}'.\
+                       format(self.verification_seqno, persisted_seqno)
 
         self.destroy_backend()
 
@@ -769,7 +1010,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         assert backfilled, "ERROR: no back filled items were streamed"
 
-        self.verification_seqno= 4
+        self.verification_seqno= 6
 
 
 
@@ -2893,8 +3134,13 @@ class RebTestCase(ParametrizedTestCase):
     # The following test starts with a cluster of 2 nodes.
     # Issue mutations to a single vbucket.
     # Wait for flushers to settle, and check items consistency
+    @unittest.skip("invalid: multiple nodes are not supported")
     def test_items_on_single_vbucket(self):
+
         nodeB = self.hosts[1]
+
+
+
         assert self.rest_client.rebalance([nodeB], [])
         assert self.rest_client.wait_for_rebalance(600)
         replica_vbs = self.all_vbucket_ids('replica')
@@ -2909,5 +3155,10 @@ class RebTestCase(ParametrizedTestCase):
 
         time.sleep(5)
         resp = self.mcd_client.stats()
-        assert resp['vb_active_curr_items'] == '500000'
-        assert resp['vb_replica_curr_items'] == '500000'
+        assert resp['vb_active_curr_items'] == str( doc_count )
+
+
+        replica_resp = mcd_clientB.stats()
+        assert replica_resp['vb_replica_curr_items'] == str( doc_count ), \
+            'Incorrect vb_replica_curr_items. Expected {0}, actual {1}'.\
+                format(doc_count, resp['vb_replica_curr_items'])
