@@ -209,6 +209,57 @@ class ExpTestCase(ParametrizedTestCase):
         self.destroy_backend()
 
 
+class StabilityTestCases(ParametrizedTestCase):
+
+
+
+
+
+    def setUp(self):
+        self.initialize_backend()
+
+
+            # Set 'count' keys on the given vbuckets
+    def set_keys(self, vbucket_count, mutation_count):
+
+        for i in range(vbucket_count):
+            for j in range(mutation_count):
+               self.mcd_client.set('key' + str(j), 0, 0, str(time.time() ), i)
+
+
+
+    # Do 10,000,000 mutations and stream them one at a time
+    def test_lots_of_mutations(self):
+
+        MUTATIONS_PER_VBUCKET = 1000
+        VBUCKET_COUNT = 1024
+
+
+        # start the mutating
+        mutation_thread = Thread( target=self.set_keys, args=(VBUCKET_COUNT, MUTATIONS_PER_VBUCKET,))
+        mutation_thread.start()
+        mutation_thread.join()
+
+
+
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        for i in range(VBUCKET_COUNT):
+            stream = self.dcp_client.stream_req(0, 0, 0, MUTATIONS_PER_VBUCKET,i)
+
+            assert stream.status == SUCCESS, 'Unexpected status {0}'.format( stream.status)
+            stream.run(MUTATIONS_PER_VBUCKET)
+
+            assert stream.last_by_seqno == MUTATIONS_PER_VBUCKET, 'Unexpected last seq no {0}'.format( stream.last_by_seqno)
+            self.dcp_client.close_stream(0)
+
+
+
+    def tearDown(self):
+        self.destroy_backend()
+
+
 """ Disconnect and reconnect test cases
 """
 
@@ -2664,6 +2715,45 @@ class DcpTestCase(ParametrizedTestCase):
         memUsed_after = float(resp['mem_used'])
 
         assert (memUsed_after < ((0.1 * memUsed_before) + memUsed_before))
+
+
+
+    """ Test for MB-11951 - streams which were opened and then closed without streaming any data caused problems
+    """
+    def test_unused_streams(self):
+
+
+
+        initial_doc_count = 100
+
+        for i in range(initial_doc_count):
+            self.mcd_client.set('key1' + str(i), 0, 0, 'value', 0)
+
+        # open the connection
+        response = self.dcp_client.open_producer("mystream")
+        assert response['status'] == SUCCESS
+
+        # open the stream
+        stream = self.dcp_client.stream_req(0, 0, 0, 1000, 0)
+
+        # and without doing anything close it again
+        response = self.dcp_client.close_stream(0)
+        assert response['status'] == SUCCESS
+
+
+        # then do some streaming for real
+
+        doc_count = 100
+        for i in range(doc_count):
+            self.mcd_client.set('key2' + str(i), 0, 0, 'value', 0)
+
+        # open the stream
+        stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0)
+        stream.run(doc_count)
+        assert stream.last_by_seqno == doc_count, \
+                     'Incorrect sequence number. Expect {0}, actual {1}'.format(doc_count,stream.last_by_seqno)
+
+
 
 class McdTestCase(ParametrizedTestCase):
     def setUp(self):
