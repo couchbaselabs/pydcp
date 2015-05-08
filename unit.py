@@ -43,7 +43,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.kwargs = kwargs
         self.verification_seqno = None
         self.verification_vb = 0
-
+        self.os_type = kwargs['os_type']
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
         else:
@@ -83,12 +83,26 @@ class ParametrizedTestCase(unittest.TestCase):
 
 
         if self.backend != RemoteServer.DEV:
-            self._execute_command('/etc/init.d/couchbase-server stop')
-            CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
-            self._execute_command(CMD)
-            time.sleep(10)
-            self._execute_command('/etc/init.d/couchbase-server start')
-            time.sleep(20)
+            if self.os_type == 'linux':
+                self._execute_command('/etc/init.d/couchbase-server stop')
+                CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
+                self._execute_command(CMD)
+                time.sleep(10)
+                self._execute_command('/etc/init.d/couchbase-server start')
+                time.sleep(20)
+
+            elif self.os_type == 'windows':
+                # todo - make this really work
+                pass
+                #self._execute_command('net stop couchbaseserver')
+                #CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
+                #self._execute_command(CMD)
+                #time.sleep(10)
+                #self._execute_command('net start couchbaseserver')
+                #time.sleep(20)
+
+
+
 
         self.rest_client = RestClient(self.host, port=self.rest_port)
         for bucket in self.rest_client.get_all_buckets():
@@ -134,7 +148,7 @@ class ParametrizedTestCase(unittest.TestCase):
                 exit(1)
 
             stdin, stdout, stderr = ssh_client.exec_command(cmd)
-            stdin.close()
+
 
             output = []
             for line in stdout.read().splitlines():
@@ -143,16 +157,18 @@ class ParametrizedTestCase(unittest.TestCase):
             for line in stderr.read().splitlines():
                 print line
 
+
+            stdin.close()
             stdout.close()
             stderr.close()
-            if len(output) > 0:
-               return output[0]
-            else:
-                return None
+
+            return output
 
 
 
     def get_persisted_seq_no(self, vbucket, rev=1):
+
+
 
         # if dev, assume a Mac, other assume Linux - Windows is currently not supported
         if ('COUCH_BINDIR' in os.environ) and (self.host == '127.0.0.1' or self.host == 'localhost'):
@@ -160,12 +176,22 @@ class ParametrizedTestCase(unittest.TestCase):
         else:
             bindir =  '/opt/couchbase/bin'
 
-        cmd = bindir + '/couch_dbinfo ' + self.db_file_location + '/' + str(vbucket) + \
-               '.couch.' + str(rev) + ' | grep update_seq'
+        if self.os_type == 'linux':
+            cmd = bindir + '/couch_dbinfo ' + self.db_file_location + '/' + str(vbucket) + \
+                   '.couch.' + str(rev)  # + ' | grep update_seq'
+        elif self.os_type == 'windows':
+            cmd =  "'C:/Program Files/Couchbase/Server/bin/couch_dbinfo.exe' '" + self.db_file_location + '/' + str(vbucket) + \
+                   '.couch.' + str(rev) + "'"
+
 
         result = self._execute_command( cmd )
+        if self.os_type == 'linux':
+           return int(result.split('\n')[2].split(':')[1])
+        elif self.os_type == 'windows':
+           return int(result[2].split(':')[1])
 
-        return int(result.split(':')[1])
+
+
 
 
     @staticmethod
@@ -222,9 +248,15 @@ class StabilityTestCases(ParametrizedTestCase):
     # Set 'count' keys on the given vbuckets
     def set_keys(self, vbucket_count, mutation_count):
 
+        count = 0
+
         for j in range(mutation_count):
             for i in range(vbucket_count):
-               self.mcd_client.set('key' + str(j), 0, 0, str(time.time() ), i)
+                if  count % 1500 == 0:
+                   print 'vbucket', i, 'mutation', j
+                self.mcd_client.set('key' + str(j), 0, 0, str(time.time() ), i)
+                count = count + 1
+
 
 
     # Do 20,000,000 mutations and stream them one at a time
@@ -617,7 +649,6 @@ class DcpTestCase(ParametrizedTestCase):
         self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
 
     def tearDown(self):
-
         if self.verification_seqno is not None:
             Stats.wait_for_persistence(self.mcd_client)
             persisted_seqno = self.get_persisted_seq_no(self.verification_vb)
@@ -1202,6 +1233,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         stream_closed = False
 
+
         response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
 
@@ -1227,6 +1259,7 @@ class DcpTestCase(ParametrizedTestCase):
             "Error: recieved all mutations on closed stream"
 
         self.verification_seqno = doc_count
+
 
     """
         Sets up a consumer connection.  Adds stream and then sends 2 close stream requests.  Expects
@@ -2676,7 +2709,10 @@ class DcpTestCase(ParametrizedTestCase):
             mutations.append(stream.mutation_count)
 
         def kill_memcached():
-            self._execute_command('killall -9 memcached')
+            if self.os_type == 'windows':
+                self._execute_command('taskkill /F /T /IM memcached*')
+            else:
+                self._execute_command('killall -9 memcached')
 
         response = self.mcd_client.stats('failovers')
         vb_uuid = long(response['vb_0:0:id'])

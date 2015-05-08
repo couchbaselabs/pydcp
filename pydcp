@@ -13,7 +13,7 @@ from unit import *
 
 class PyDCP:
 
-    def __init__(self, suite, backend, hosts, port, ssh_username, ssh_password, xml, only_tc):
+    def __init__(self, suite, backend, hosts, port, ssh_username, ssh_password, xml, only_tc, os_type):
         self.suite = suite
         self.backend = backend
         self.hosts = hosts
@@ -23,6 +23,7 @@ class PyDCP:
         self.ssh_password = ssh_password
         self.xml = xml
         self.only_tc = only_tc
+        self.os_type = os_type
 
     def run_test(self):
 
@@ -116,6 +117,8 @@ def main():
                         help='testsuite to execute')
     parser.add_argument('-b', '--backend', default='cb',
                         help='backend server to run against')
+    parser.add_argument('-t', '--os_type', default='linux',
+                        help='backend server to run against')
     parser.add_argument('-v', '--verbosity', action='count',
                         help='verbosity level')
     parser.add_argument('-x', '--xml', action='store_true', default=False)
@@ -128,7 +131,8 @@ def main():
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
-    pyDcp = PyDCP(args.suite, backend, args.hosts, port, args.ssh_username, args.ssh_password, args.xml, args.only)
+    pyDcp = PyDCP(args.suite, backend, args.hosts, port, args.ssh_username, args.ssh_password, args.xml,
+                  args.only, args.os_type)
     pyDcp.run_test()
 
 if __name__ == "__main__":
