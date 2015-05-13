@@ -186,7 +186,7 @@ class ParametrizedTestCase(unittest.TestCase):
 
         result = self._execute_command( cmd )
         if self.os_type == 'linux':
-           return int(result.split('\n')[2].split(':')[1])
+           return int(result[2].split('\n')[0].split(':')[1])
         elif self.os_type == 'windows':
            return int(result[2].split(':')[1])
 
@@ -253,7 +253,7 @@ class StabilityTestCases(ParametrizedTestCase):
         for j in range(mutation_count):
             for i in range(vbucket_count):
                 if  count % 1500 == 0:
-                   print 'vbucket', i, 'mutation', j
+                   pass #print 'vbucket', i, 'mutation', j
                 self.mcd_client.set('key' + str(j), 0, 0, str(time.time() ), i)
                 count = count + 1
 
