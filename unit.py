@@ -168,8 +168,6 @@ class ParametrizedTestCase(unittest.TestCase):
 
     def get_persisted_seq_no(self, vbucket, rev=1):
 
-
-
         # if dev, assume a Mac, other assume Linux - Windows is currently not supported
         if ('COUCH_BINDIR' in os.environ) and (self.host == '127.0.0.1' or self.host == 'localhost'):
             bindir = os.environ['COUCH_BINDIR']
@@ -183,15 +181,11 @@ class ParametrizedTestCase(unittest.TestCase):
             cmd =  "'C:/Program Files/Couchbase/Server/bin/couch_dbinfo.exe' '" + self.db_file_location + '/' + str(vbucket) + \
                    '.couch.' + str(rev) + "'"
 
-
         result = self._execute_command( cmd )
         if self.os_type == 'linux':
            return int(result[2].split('\n')[0].split(':')[1])
         elif self.os_type == 'windows':
            return int(result[2].split(':')[1])
-
-
-
 
 
     @staticmethod
@@ -2275,7 +2269,15 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
 
-        self.verification_seqno = 2
+        Stats.wait_for_persistence(self.mcd_client)
+
+        stats = self.mcd_client.stats()
+        num_expired = stats['vb_active_expired']
+        if num_expired == 0:
+            self.verification_seqno = 2
+        else:
+            assert num_expired == 1
+            self.verification_seqno = 3
 
     def test_stream_request_gat(self):
         """ stream mutations created by get-and-touch command """
@@ -2295,7 +2297,14 @@ class DcpTestCase(ParametrizedTestCase):
         assert int(responses[1]['expiration']) > 0
 
         Stats.wait_for_persistence(self.mcd_client)
-        self.verification_seqno = 2
+
+        stats = self.mcd_client.stats()
+        num_expired = int(stats['vb_active_expired'])
+        if num_expired == 0:
+            self.verification_seqno = 2
+        else:
+            assert num_expired == 1
+            self.verification_seqno = 3
 
     def test_stream_request_client_per_vb(self):
         """ stream request muataions from each vbucket with a new client """
