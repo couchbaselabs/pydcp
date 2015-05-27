@@ -21,6 +21,8 @@ import os
 from subprocess import Popen, PIPE
 import datetime
 
+from lib.atopstats import AtopStats
+
 
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
 
@@ -57,7 +59,22 @@ class ParametrizedTestCase(unittest.TestCase):
             self.memcached_backend_setup()
         else:
             self.couchbase_backend_setup()
+
+
+
+
+        nodes = [i.split(':')[0] for i in self.rest_client.get_nodes()]
+        self.atop = AtopStats(self.os_type, hosts=nodes,  user=self.ssh_username,  password=self.ssh_password)
+        self.atop.restart_atop()
+        time.sleep(5)
+        self.atop.update_columns()
+        res = self.atop.get_process_cpu("memcached")
+
+
+
+
         logging.info("-----Begin Test Case-----")
+
 
     def destroy_backend(self):
         logging.info("-----Tear Down Test Case-----")
@@ -65,6 +82,7 @@ class ParametrizedTestCase(unittest.TestCase):
             self.memcached_backend_teardown()
         else:
             self.couchbase_backend_teardown()
+        self.atop.stop_atop()
 
     def memcached_backend_setup(self):
         self.dcp_client = DcpClient(self.host, self.port)
@@ -168,6 +186,8 @@ class ParametrizedTestCase(unittest.TestCase):
 
     def get_persisted_seq_no(self, vbucket, rev=1):
 
+
+
         # if dev, assume a Mac, other assume Linux - Windows is currently not supported
         if ('COUCH_BINDIR' in os.environ) and (self.host == '127.0.0.1' or self.host == 'localhost'):
             bindir = os.environ['COUCH_BINDIR']
@@ -181,11 +201,15 @@ class ParametrizedTestCase(unittest.TestCase):
             cmd =  "'C:/Program Files/Couchbase/Server/bin/couch_dbinfo.exe' '" + self.db_file_location + '/' + str(vbucket) + \
                    '.couch.' + str(rev) + "'"
 
+
         result = self._execute_command( cmd )
         if self.os_type == 'linux':
-           return int(result[2].split('\n')[0].split(':')[1])
+           return int(result.split('\n')[2].split(':')[1])
         elif self.os_type == 'windows':
            return int(result[2].split(':')[1])
+
+
+
 
 
     @staticmethod
@@ -246,8 +270,12 @@ class StabilityTestCases(ParametrizedTestCase):
 
         for j in range(mutation_count):
             for i in range(vbucket_count):
-                if  count % 1500 == 0:
-                   pass #print 'vbucket', i, 'mutation', j
+                if  count % 10000 == 0:
+                    #print 'vbucket', i, 'mutation', j
+                    self.atop.update_columns()
+                    print 'setting keys - memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
+                          'vsize:', self.atop.get_process_vsize("memcached")[self.host][1], \
+                          'rss:', self.atop.get_process_rss("memcached")[self.host][1]
                 self.mcd_client.set('key' + str(j), 0, 0, str(time.time() ), i)
                 count = count + 1
 
@@ -257,8 +285,7 @@ class StabilityTestCases(ParametrizedTestCase):
     def test_volume(self):
 
 
-        print '\n\nin the volume test'
-        MUTATIONS_PER_VBUCKET = 20000
+        MUTATIONS_PER_VBUCKET = 2000
         VBUCKET_COUNT = 1024
 
 
@@ -279,7 +306,19 @@ class StabilityTestCases(ParametrizedTestCase):
             stream.run(MUTATIONS_PER_VBUCKET)
 
             assert stream.last_by_seqno == MUTATIONS_PER_VBUCKET, 'Unexpected last seq no {0}'.format( stream.last_by_seqno)
+
+
+            if i % 100 == 0:
+                    self.atop.update_columns()
+                    print 'streaming vbucket', i, 'memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
+                          'vsize:', self.atop.get_process_vsize("memcached")[self.host][1], \
+                          'rss:', self.atop.get_process_rss("memcached")[self.host][1]
             self.dcp_client.close_stream(0)
+
+        self.atop.update_columns()
+        print 'end of test','memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
+                          'vsize:', self.atop.get_process_vsize("memcached")[self.host][1], \
+                          'rss:', self.atop.get_process_rss("memcached")[self.host][1]
 
 
 
@@ -643,6 +682,7 @@ class DcpTestCase(ParametrizedTestCase):
         self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
 
     def tearDown(self):
+
         if self.verification_seqno is not None:
             Stats.wait_for_persistence(self.mcd_client)
             persisted_seqno = self.get_persisted_seq_no(self.verification_vb)
@@ -2279,6 +2319,7 @@ class DcpTestCase(ParametrizedTestCase):
             assert num_expired == 1
             self.verification_seqno = 3
 
+
     def test_stream_request_gat(self):
         """ stream mutations created by get-and-touch command """
 
@@ -2297,7 +2338,6 @@ class DcpTestCase(ParametrizedTestCase):
         assert int(responses[1]['expiration']) > 0
 
         Stats.wait_for_persistence(self.mcd_client)
-
         stats = self.mcd_client.stats()
         num_expired = int(stats['vb_active_expired'])
         if num_expired == 0:
@@ -2305,6 +2345,7 @@ class DcpTestCase(ParametrizedTestCase):
         else:
             assert num_expired == 1
             self.verification_seqno = 3
+
 
     def test_stream_request_client_per_vb(self):
         """ stream request muataions from each vbucket with a new client """
