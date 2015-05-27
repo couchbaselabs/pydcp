@@ -2,8 +2,7 @@ from uuid import uuid4
 
 from fabric.api import run
 
-from cbagent.collectors.libstats.remotestats import (
-    RemoteStats, multi_node_task, single_node_task)
+from remotestats import RemoteStats, multi_node_task, single_node_task
 
 
 class AtopStats(RemoteStats):
