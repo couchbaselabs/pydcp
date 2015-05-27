@@ -46,6 +46,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.verification_seqno = None
         self.verification_vb = 0
         self.os_type = kwargs['os_type']
+        self.collect_stats = kwargs['collect_stats']
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
         else:
@@ -64,11 +65,12 @@ class ParametrizedTestCase(unittest.TestCase):
 
 
         nodes = [i.split(':')[0] for i in self.rest_client.get_nodes()]
-        self.atop = AtopStats(self.os_type, hosts=nodes,  user=self.ssh_username,  password=self.ssh_password)
-        self.atop.restart_atop()
-        time.sleep(5)
-        self.atop.update_columns()
-        res = self.atop.get_process_cpu("memcached")
+        if self.collect_stats:
+            self.atop = AtopStats(self.os_type, hosts=nodes,  user=self.ssh_username,  password=self.ssh_password)
+            self.atop.restart_atop()
+            time.sleep(5)
+            self.atop.update_columns()
+            res = self.atop.get_process_cpu("memcached")
 
 
 
@@ -82,7 +84,7 @@ class ParametrizedTestCase(unittest.TestCase):
             self.memcached_backend_teardown()
         else:
             self.couchbase_backend_teardown()
-        self.atop.stop_atop()
+        if self.collect_stats: self.atop.stop_atop()
 
     def memcached_backend_setup(self):
         self.dcp_client = DcpClient(self.host, self.port)
@@ -204,7 +206,8 @@ class ParametrizedTestCase(unittest.TestCase):
 
         result = self._execute_command( cmd )
         if self.os_type == 'linux':
-           return int(result.split('\n')[2].split(':')[1])
+           #return int(result.split('\n')[2].split(':')[1])
+           return int(result[2].split('\n')[0].split(':')[1])
         elif self.os_type == 'windows':
            return int(result[2].split(':')[1])
 
