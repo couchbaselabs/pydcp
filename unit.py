@@ -2411,6 +2411,35 @@ class DcpTestCase(ParametrizedTestCase):
 
         self.verification_seqno = 5
 
+
+    " MB-15213 buffer size of zero means no flow control"
+    def test_flow_control_buffer_size_zero(self):
+        """ verify no flow control for a 0 byte buffer stream """
+
+        response = self.dcp_client.open_producer("flowctl")
+        assert response['status'] == SUCCESS
+
+
+        buffsize = 0
+        response = self.dcp_client.flow_control(buffsize)
+        assert response['status'] == SUCCESS
+
+        for i in range(5):
+                self.mcd_client.set('key'+str(i), 0, 0, 'value', 0)
+
+        stream = self.dcp_client.stream_req(0, 0, 0, 5, 0)
+        required_ack = False
+
+        # consume the stream
+        while stream.has_response():
+                resp = stream.next_response()
+
+
+        assert stream.last_by_seqno == 5
+
+
+
+
     def test_flow_control_stats(self):
         """ verify flow control stats """
 
