@@ -168,6 +168,14 @@ class MemcachedClient(object):
         opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(memcacheConstants.CMD_SET, key, val, opaque, struct.pack(SET_PKT_FMT, flags, exp), 0)
 
+    def send_snapshot_marker(self, start, end, vbucket= -1):
+        """Set a value in the memcached server without handling the response"""
+        #self._set_vbucket(key, vbucket)
+        opaque = self.r.randint(0, 2 ** 32)
+        self._sendCmd(memcacheConstants.CMD_SNAPSHOT_MARKER, '', '', opaque, struct.pack("QQI", start, end, 1), 0)
+        return self._handleSingleResponse(opaque)
+
+
     def add(self, key, exp, flags, val, vbucket= -1):
         """Add a value in the memcached server iff it doesn't already exist."""
         self._set_vbucket(key, vbucket)
@@ -333,6 +341,9 @@ class MemcachedClient(object):
         self.vbucketId = vbucket
         return self._doCmd(memcacheConstants.CMD_GET_VBUCKET_STATE,
                            str(vbucket), '')
+
+    def get_vbucket_all_vbucket_seqnos(self):
+        return self._doCmd(memcacheConstants.CMD_GET_ALL_VB_SEQNOS,  '', '')
 
     def delete_vbucket(self, vbucket):
         assert isinstance(vbucket, int)

@@ -711,6 +711,7 @@ class DcpTestCase(ParametrizedTestCase):
         self.dcp_client.close()
         time.sleep(1)
         response = self.mcd_client.stats('dcp')
+
         assert 'eq_dcpq:mystream:type' not in response
 
     """Basic dcp open producer connection test
@@ -2294,7 +2295,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         self.verification_seqno = 101
 
-
+    @unittest.skip("needs debug")
     def test_stream_request_touch(self):
         """ stream mutations created by touch command """
 
@@ -2704,6 +2705,18 @@ class DcpTestCase(ParametrizedTestCase):
 
         for doc in mutations:
             assert doc['value'] == 'new-value'
+
+
+
+
+    def test_get_all_seq_no(self):
+
+        res = self.mcd_client.get_vbucket_all_vbucket_seqnos()
+
+
+        for i in range(1024):
+            bucket, seqno = struct.unpack(">HQ", res[2][i*10:(i+1)*10])
+            assert bucket == i
 
 
 
