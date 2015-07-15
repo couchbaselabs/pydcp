@@ -102,7 +102,7 @@ class ParametrizedTestCase(unittest.TestCase):
         # supported for the "normal" client so we sed the rbac.json to update their permissions. Windows is not supported
 
 
-        if False and self.backend != RemoteServer.DEV:
+        if self.backend != RemoteServer.DEV:
             if self.os_type == 'linux':
                 self._execute_command('/etc/init.d/couchbase-server stop')
                 CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
