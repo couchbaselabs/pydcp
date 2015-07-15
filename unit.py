@@ -102,7 +102,7 @@ class ParametrizedTestCase(unittest.TestCase):
         # supported for the "normal" client so we sed the rbac.json to update their permissions. Windows is not supported
 
 
-        if self.backend != RemoteServer.DEV:
+        if False and self.backend != RemoteServer.DEV:
             if self.os_type == 'linux':
                 self._execute_command('/etc/init.d/couchbase-server stop')
                 CMD =  'sed -i -e \'s/"SET_WITH_META",/"SET_WITH_META","SET_DRIFT_COUNTER_STATE","GET_ADJUSTED_TIME",/\' /opt/couchbase/etc/security/rbac.json'
@@ -1764,7 +1764,7 @@ class DcpTestCase(ParametrizedTestCase):
   
     """
     MB-13386 - delete and compaction
-    Stores 10 items into vbucket 0 and then deletes 5 of thos items. After
+    Stores 10 items into vbucket 0 and then deletes 5 of those items. After
     the items have been inserted/deleted from the server we create an dcp
     stream to retrieve those items in order of sequence number.
     """
@@ -1779,6 +1779,8 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(2,4):
             self.mcd_client.delete('key' + str(i),0, 0)
 
+        time.sleep(2)
+
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
@@ -1791,7 +1793,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         # wait for compaction to end - if this were a rest call then we could use active tasks but
         # as this an mc bin client call the only way known (to me) is to sleep
-        time.sleep(10)
+        time.sleep(20)
 
 
 
@@ -1799,9 +1801,12 @@ class DcpTestCase(ParametrizedTestCase):
         assert response['status'] == SUCCESS
 
         last_by_seqno = 0
+        time.sleep(5)
         stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, 0)
         assert stream.status == SUCCESS
         responses = stream.run()
+
+        print 'responses', responses
 
 
         mutations = \
