@@ -1815,7 +1815,7 @@ class DcpTestCase(ParametrizedTestCase):
            len(filter(lambda r: r['opcode']==CMD_DELETION, responses))
 
 
-        assert deletions == 2,'Deletion mismatch, expect {0}, actual {1}'.format(2, deletions)
+        assert deletions == 1,'Deletion mismatch, expect {0}, actual {1}'.format(2, deletions)
         assert mutations == 1,'Mutation mismatch, expect {0}, actual {1}'.format(1, mutations)
 
         assert stream.last_by_seqno == 5
