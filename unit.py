@@ -2754,6 +2754,9 @@ class DcpTestCase(ParametrizedTestCase):
     def test_conflict_resolution_and_adjusted_time(self):
 
 
+        if self.os_type == 'windows':
+            return # currently not supported on Windows
+
         n = 5
 
         response = self.dcp_client.open_producer("producer")
