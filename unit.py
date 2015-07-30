@@ -2110,7 +2110,7 @@ class DcpTestCase(ParametrizedTestCase):
         # fallthrough
         resp = self.dcp_client.stream_req(0, 0, 7, 7, vb_uuid, 2, 7)
         assert resp and resp.status == ERR_ROLLBACK, resp.status
-        assert resp and resp.rollback == 2, resp.rollback
+        assert resp and resp.rollback == 3, resp.rollback
 
 
     def test_stream_request_after_close(self):
