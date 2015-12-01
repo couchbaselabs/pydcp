@@ -327,9 +327,10 @@ class StabilityTestCases(ParametrizedTestCase):
 
 
     # Do 1,000,000 mutations and stream them one at a time
+    # 12/1/2105 - this test was running vaery slowly probably due to the network so reduced by a factor of 10
     def test_lots_of_mutations(self):
 
-        MUTATIONS_PER_VBUCKET = 1000
+        MUTATIONS_PER_VBUCKET = 100
         VBUCKET_COUNT = 1024
 
 
