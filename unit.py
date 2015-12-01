@@ -501,7 +501,7 @@ class MultiClientTestCases(ParametrizedTestCase):
         for i in range(count):
             for j in range(vbuckets):
                 self.mcd_client.set('key' + str(i), 0, 0, str(time.time() ), j)
-                #time.sleep(0.010)
+                time.sleep(0.010)
 
 
 
@@ -2840,7 +2840,7 @@ class DcpTestCase(ParametrizedTestCase):
         self.mcd_client = McdClient(self.host, self.port)
 
         response = self.mcd_client.stats('failovers')
-        vb_uuid = long(response['vb_0:1:id'])
+        vb_uuid = long(response['vb_0:0:id'])
 
         assert len(by_seqno_list)
         start = by_seqno_list[0]
