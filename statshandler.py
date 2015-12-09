@@ -47,7 +47,8 @@ class Stats():
             client = McdClient(host, port)
             try:
                 response = client.stats()
-                if response['ep_degraded_mode'] == 'false':
+                # check the old style or new style (as of 4.5) results
+                if response['ep_degraded_mode'] == '0' or response['ep_degraded_mode'] == 'false':
                     break
             except:
                 pass

@@ -259,9 +259,6 @@ class ExpTestCase(ParametrizedTestCase):
 class StabilityTestCases(ParametrizedTestCase):
 
 
-
-
-
     def setUp(self):
         self.initialize_backend()
 
@@ -352,6 +349,44 @@ class StabilityTestCases(ParametrizedTestCase):
 
             assert stream.last_by_seqno == MUTATIONS_PER_VBUCKET, 'Unexpected last seq no {0}'.format( stream.last_by_seqno)
             self.dcp_client.close_stream(0)
+
+
+
+    # This is for the Viber issue - MB-16915, if streams are closed (as in a rebalance stop) there was a race condition
+    # which could cause a crash. If this test completes then we know we did not crash
+
+    def test_close_streams(self):
+
+        MUTATIONS_PER_VBUCKET = 10000
+
+        # we have more vbuckets but just use 8
+        VBUCKET_COUNT = 8
+
+
+        # populate a bunch of keys
+        self.set_keys(VBUCKET_COUNT, 120000/VBUCKET_COUNT)
+
+        # start the mutating as background load
+        mutation_thread = Thread( target=self.set_keys, args=(VBUCKET_COUNT, MUTATIONS_PER_VBUCKET,))
+        mutation_thread.start()
+
+
+        # and then do lots and lots of stream opens and then close
+        for i in range(1000):
+
+            self.dcp_client = DcpClient(self.host, self.port)
+            response = self.dcp_client.open_producer("mystream")
+
+            for j in range(VBUCKET_COUNT):
+                response = self.dcp_client.stream_req(j, 0, 0, 100000, 0)
+
+                response = self.dcp_client.close_stream(j)
+
+
+        #print 'done the open and closing, waiting for mutations to complete'
+        mutation_thread.join()
+
+
 
 
 
