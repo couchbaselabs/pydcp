@@ -11,7 +11,7 @@ class DcpClient(MemcachedClient):
     """ DcpClient implements dcp protocol using mc_bin_client as base
         for sending and receiving commands """
 
-    def __init__(self, host='127.0.0.1', port=11210, timeout=1):
+    def __init__(self, host='127.0.0.1', port=11210, timeout=30):
         super(DcpClient, self).__init__(host, port, timeout)
 
         # recv timeout
