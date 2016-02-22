@@ -49,10 +49,16 @@ class RestClient(object):
         return status
 
     def get_all_buckets(self):
+
         buckets = []
         api = '%s%s' % (self.baseUrl, 'pools/default/buckets')
         status, content, header = self._http_request(api, 'GET')
-        json_parsed = json.loads(content)
+        try:
+           json_parsed = json.loads(content)
+        except:
+            print 'get_all_buckets: unexpected response. Status:', status
+            print 'content', content
+            print 'header', header
         if status:
             for item in json_parsed:
                 buckets.append(item['name'].encode('ascii'))

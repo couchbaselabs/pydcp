@@ -122,7 +122,7 @@ def main():
     parser.add_argument('-t', '--os_type', default='linux',
                         help='backend server to run against')
     parser.add_argument('-tc', '--collect_stats', default=False,
-                        help='backend server to run against')
+                        help='collect atop type stats')
     parser.add_argument('-v', '--verbosity', action='count',
                         help='verbosity level')
     parser.add_argument('-x', '--xml', action='store_true', default=False)

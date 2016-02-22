@@ -281,7 +281,7 @@ class DcpStream(object):
     def has_response(self):
         return not self._ended
 
-    def run(self, to_seqno = MAX_SEQNO, retries = 10):
+    def run(self, to_seqno = MAX_SEQNO, retries = 20):
 
         responses = []
 
