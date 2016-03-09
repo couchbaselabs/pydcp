@@ -272,10 +272,11 @@ class StabilityTestCases(ParametrizedTestCase):
             for i in range(vbucket_count):
                 if  count % 10000 == 0:
                     #print 'vbucket', i, 'mutation', j
-                    self.atop.update_columns()
-                    print 'setting keys - memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
-                          'vsize:', self.atop.get_process_vsize("memcached")[self.host][1], \
-                          'rss:', self.atop.get_process_rss("memcached")[self.host][1]
+                    if self.collect_stats:
+                        self.atop.update_columns()
+                        print 'setting keys - memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
+                              'vsize:', self.atop.get_process_vsize("memcached")[self.host][1], \
+                              'rss:', self.atop.get_process_rss("memcached")[self.host][1]
                 self.mcd_client.set('key' + str(j), 0, 0, str(time.time() ), i)
                 count = count + 1
 
@@ -308,15 +309,16 @@ class StabilityTestCases(ParametrizedTestCase):
             assert stream.last_by_seqno == MUTATIONS_PER_VBUCKET, 'Unexpected last seq no {0}'.format( stream.last_by_seqno)
 
 
-            if i % 100 == 0:
+            if self.collect_stats and  i % 100 == 0:
                     self.atop.update_columns()
                     print 'streaming vbucket', i, 'memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
                           'vsize:', self.atop.get_process_vsize("memcached")[self.host][1], \
                           'rss:', self.atop.get_process_rss("memcached")[self.host][1]
             self.dcp_client.close_stream(0)
 
-        self.atop.update_columns()
-        print 'end of test','memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
+        if self.collect_stats:
+            self.atop.update_columns()
+            print 'end of test','memcache cpu:', self.atop.get_process_cpu("memcached")[self.host][1], \
                           'vsize:', self.atop.get_process_vsize("memcached")[self.host][1], \
                           'rss:', self.atop.get_process_rss("memcached")[self.host][1]
 
@@ -2504,8 +2506,14 @@ class DcpTestCase(ParametrizedTestCase):
         assert all(map(lambda x: x==0, info()))
 
         stream = self.dcp_client.stream_req(0, 0, 0, 3, 0)
+        time.sleep(10)   # give time for the stats to settle
         acked, sent, unacked = info()
         assert acked == 0
+
+        if unacked != sent:
+            print "test_flow_control_stats unacked %d sent %d" % (unacked, sent)
+            logging.info("test_flow_control_stats unacked %d sent %d" % (unacked, sent))
+
         assert unacked == sent
 
         # ack received bytes
