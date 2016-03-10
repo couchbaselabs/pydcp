@@ -2795,7 +2795,7 @@ class DcpTestCase(ParametrizedTestCase):
         commands.
     """
 
-   @unittest.skip("deferred from Watson")
+    @unittest.skip("deferred from Watson")
     def test_conflict_resolution_and_adjusted_time(self):
 
 
