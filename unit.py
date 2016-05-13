@@ -846,7 +846,10 @@ class DcpTestCase(ParametrizedTestCase):
         c2_stats = self.mcd_client.stats('dcp')
 
         assert c2_stats['eq_dcpq:'+stream+':type'] == 'producer'
-        assert c2_stats['ep_dcp_count'] == '1'
+
+
+        # CBQE-3410 1 or 2 is ok
+        assert c2_stats['ep_dcp_count'] == '1' or c2_stats['ep_dcp_count'] == '2'
 
         assert c1_stats['eq_dcpq:'+stream+':created'] <\
            c2_stats['eq_dcpq:'+stream+':created']
