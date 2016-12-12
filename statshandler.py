@@ -26,14 +26,10 @@ class Stats():
 
     @staticmethod
     def wait_for_persistence(client):
-        # disable due to MB-21925
-        return
-        """
         while int(Stats.get_stat(client, 'ep_queue_size')) > 0:
             time.sleep(1)
         while int(Stats.get_stat(client, 'ep_commit_num')) == 0:
             time.sleep(1)
-        """
 
     @staticmethod
     def wait_for_stat(client, stat, val, type=''):
