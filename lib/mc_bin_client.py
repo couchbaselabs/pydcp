@@ -106,10 +106,10 @@ class MemcachedClient(object):
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE)), "Got magic: %d" % magic
-        return cmd, errcode, opaque, cas, keylen, extralen, rv
+        return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv
 
     def _handleKeyedResponse(self, myopaque):
-        cmd, errcode, opaque, cas, keylen, extralen, rv = self._recvMsg()
+        cmd, errcode, opaque, cas, keylen, extralen, dtype, rv = self._recvMsg()
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode:
