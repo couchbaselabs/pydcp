@@ -28,7 +28,7 @@ CMD_GAT = 0x1d
 CMD_GET_REPLICA = 0x83
 CMD_OBSERVE = 0x92
 
-# UPR command opcodes
+# DCP command opcodes
 CMD_OPEN             = 0x50
 CMD_ADD_STREAM       = 0x51
 CMD_CLOSE_STREAM     = 0x52
@@ -44,8 +44,8 @@ CMD_SET_VB_STATE     = 0x5b
 CMD_UPRNOOP          = 0x5c
 CMD_ACK              = 0x5d
 CMD_FLOW_CONTROL     = 0x5e
-CMD_UPR_NOOP         = 0x5c
-CMD_UPR_ACK          = 0x5d
+CMD_DCP_NOOP         = 0x5c
+CMD_DCP_ACK          = 0x5d
 CMD_CONTROL     = 0x5e
 
 # SASL stuff
@@ -164,10 +164,11 @@ TAP_FLAG_TYPES = {TAP_FLAG_BACKFILL: ">Q",
 TAP_FLAG_ACK = 0x01
 TAP_FLAG_NO_VALUE = 0x02 # The value for the key is not included in the packet
 
-# UPR per-message flags
+# DCP per-message flags
 FLAG_OPEN_CONSUMER = 0x00
 FLAG_OPEN_PRODUCER = 0x01
 FLAG_OPEN_NOTIFIER = 0x02
+FLAG_OPEN_INCLUDE_XATTRS = 0x4
 
 #CCCP
 CMD_SET_CLUSTER_CONFIG = 0xb4
@@ -257,3 +258,6 @@ ERR_EBUSY = 0x85
 ERR_ETMPFAIL = 0x86
 
 META_REVID = 0x01
+
+# Datatypes
+DATATYPE_XATTR = 0x4
