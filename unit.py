@@ -3,6 +3,10 @@ import logging
 import time
 import random
 import struct
+import couchbase.subdocument as SD
+import json
+
+from couchbase.bucket import Bucket, SD
 
 try:
     import unittest2 as unittest
@@ -3466,7 +3470,111 @@ class RebTestCase(ParametrizedTestCase):
         assert resp['vb_active_curr_items'] == str( doc_count )
 
 
-        replica_resp = mcd_clientB.stats()
+        replica_resp = mcd_client.stats()
         assert replica_resp['vb_replica_curr_items'] == str( doc_count ), \
             'Incorrect vb_replica_curr_items. Expected {0}, actual {1}'.\
                 format(doc_count, resp['vb_replica_curr_items'])
+
+
+class XATTRTestCases(ParametrizedTestCase):
+    MUTATION_COUNT = 20
+
+    # cb = Bucket("couchbase://172.23.106.88/default")
+
+    def setUp(self):
+        self.initialize_backend()
+
+    # Set 'count' keys on the given vbuckets
+    def set_keys_on_all_vbuckets(self, count, vbuckets):
+        for i in range(count):
+            for j in range(vbuckets):
+                self.mcd_client.set('key' + str(i) + "_" + str(j), 0, 0, json.dumps({}), vbucket=j)
+                # self.mcd_client.cb.mutate_in('key' + str(i), SD.upsert("k", "v", xattr=True))
+                self.mcd_client.dict_add_sd('key' + str(i) + "_" + str(j), 'path', json.dumps({}), expiry=0, opaque=0,
+                                            cas=0, create=True, xattr=True, vbucket=j)
+                # rv = self.cb.lookup_in('key' + str(i) + "_" + str(j), SD.get('path', xattr=True))
+                # self.assertTrue(rv.exists('path'))
+                time.sleep(0.010)
+                print i, j
+
+                # consume the streams for all vbuckets. Index is a unique stream identifier
+
+    def consume_all_streams(self, dcp_client, vbucket_count, index=1):
+
+        response = dcp_client.open_producer("mystream" + str(index))
+        assert response['status'] == SUCCESS
+
+        for i in range(vbucket_count):
+            stream = dcp_client.stream_req(i, 0, 0, XATTRTestCases.MUTATION_COUNT, 0)
+            assert stream.status == SUCCESS
+            stream.run(XATTRTestCases.MUTATION_COUNT)
+            print "stream.last_by_seqno:", stream.last_by_seqno
+            assert stream.last_by_seqno == XATTRTestCases.MUTATION_COUNT
+
+    """ This is the main routine - takes as parameter the number of clients and vbuckets and
+        verifies the clients receive streams.
+    """
+
+    def vary_by_clients_streams_and_vbuckets(self, client_count, vbucket_count):
+
+        dcp_clients = []
+        for i in range(client_count):
+            dcp_clients.append(DcpClient(self.host, self.port))
+
+        # concurrently set the keys
+        mutation_thread = Thread(target=self.set_keys_on_all_vbuckets,
+                                 args=(XATTRTestCases.MUTATION_COUNT, vbucket_count,))
+        mutation_thread.start()
+        # don't do a join, let the mutations run concurrently with the stream
+
+        consumer_threads = []
+        for i in range(client_count):
+            consumer_threads.append(Thread(target=self.consume_all_streams,
+                                           args=(dcp_clients[i], vbucket_count, i)))
+
+        for i in consumer_threads:
+            i.start()
+
+        self.add_stream()
+
+        for i in consumer_threads:
+            i.join()
+
+    def add_stream(self):
+        print 'Creating DCP Client Object'
+        dcp_client = DcpClient('127.0.0.1', 11210, timeout=300)
+
+        print 'Sending open connection (consumer)'
+        response = dcp_client.open_producer("haiko1980", xattr=True)
+        assert response['status'] == SUCCESS
+        print "Success"
+
+        print 'Sending add stream request'
+        vb = 1
+        end_seq_no = 0xffffffffffffffff
+        op = dcp_client.stream_req(vb, 0, 0, end_seq_no, 0, 0)
+
+        while True:
+            if op.has_response():
+                response = op.next_response()
+                print "response:", response
+                print 'Got response: ', response['opcode']
+                if response['opcode'] == CMD_STREAM_REQ:
+                    assert response['status'] == SUCCESS
+                elif response['opcode'] == CMD_MUTATION:
+                    vb = response['vbucket']
+                    key = response['key']
+                    seqno = response['value']
+                    xattrs = response['xattrs']
+                    print 'VB: %d got key %s with xattrs %s' % (vb, key, xattrs)
+            else:
+                print 'No response'
+
+        dcp_client.shutdown()
+
+    def test_many_clients_1_vbucket(self):
+        self.vary_by_clients_streams_and_vbuckets(5, 1)
+
+    def tearDown(self):
+        pass
+        self.destroy_backend()

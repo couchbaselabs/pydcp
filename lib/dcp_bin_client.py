@@ -214,6 +214,7 @@ class DcpClient(MemcachedClient):
                     self.ack_stream_req(opaque)
 
             except Exception as ex:
+                print ex
                 if 'died' in str(ex):
                     return  {'opcode'  : op.opcode,
                              'status'  : 0xff}
@@ -477,6 +478,7 @@ class StreamRequest(Operation):
     def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         adjusted_time = None
         conflict_resolution_mode = 0
+        xattrs = None
 
         if opcode == CMD_STREAM_REQ:
 
