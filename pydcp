@@ -13,7 +13,8 @@ from unit import *
 
 class PyDCP:
 
-    def __init__(self, suite, backend, hosts, port, ssh_username, ssh_password, xml, only_tc, os_type, collect_stats):
+    def __init__(self, suite, backend, hosts, port, ssh_username, ssh_password, xml, only_tc, os_type,
+                 collect_stats, bucket_type):
         self.suite = suite
         self.backend = backend
         self.hosts = hosts
@@ -25,6 +26,7 @@ class PyDCP:
         self.only_tc = only_tc
         self.os_type = os_type
         self.collect_stats = collect_stats
+        self.bucket_type = bucket_type
 
 
     def run_test(self):
@@ -131,12 +133,14 @@ def main():
 
     parser.add_argument('-u', '--ssh_username',  help='ssh_username for remote operations')
     parser.add_argument('-p', '--ssh_password',  help='ssh_password for remote operations')
+    parser.add_argument('-c', '--bucket_type', default='membase',
+                        help='membase or ephemeral')
 
     args = parser.parse_args()
     backend, port = get_remote_server(args.backend)
     set_log_level(args.verbosity)
     pyDcp = PyDCP(args.suite, backend, args.hosts, port, args.ssh_username, args.ssh_password, args.xml,
-                  args.only, args.os_type, args.collect_stats)
+                  args.only, args.os_type, args.collect_stats, args.bucket_type)
     pyDcp.run_test()
 
 if __name__ == "__main__":
