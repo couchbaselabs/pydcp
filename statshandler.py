@@ -5,6 +5,10 @@ from constants import *
 from lib.mc_bin_client import MemcachedClient as McdClient
 
 class Stats():
+
+    def __init__(self, bucket_type):
+        self.bucket_type = bucket_type
+
     @staticmethod
     def get_stat(client, stat, type=''):
         response = client.stats(type)
@@ -24,8 +28,10 @@ class Stats():
         assert response['status'] == SUCCESS
         return stat in response['value']
 
-    @staticmethod
-    def wait_for_persistence(client):
+
+    def wait_for_persistence(self, client):
+        if self.bucket_type == 'ephemeral': return
+
         while int(Stats.get_stat(client, 'ep_queue_size')) > 0:
             time.sleep(1)
         while int(Stats.get_stat(client, 'ep_commit_num')) == 0:
@@ -41,8 +47,8 @@ class Stats():
             time.sleep(1)
         return False
 
-    @staticmethod
-    def wait_for_warmup(host, port):
+    def wait_for_warmup(self, host, port):
+        if self.bucket_type == 'ephemeral': return
         while True:
             client = McdClient(host, port)
             try:
