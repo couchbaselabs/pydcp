@@ -46,6 +46,7 @@ class ParametrizedTestCase(unittest.TestCase):
         self.verification_seqno = None
         self.verification_vb = 0
         self.os_type = kwargs['os_type']
+        self.bucket_type = kwargs['bucket_type']
         self.collect_stats = kwargs['collect_stats']
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
@@ -129,7 +130,7 @@ class ParametrizedTestCase(unittest.TestCase):
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
         logging.info("Creating default bucket")
-        assert self.rest_client.create_default_bucket(self.replica)
+        assert self.rest_client.create_default_bucket(self.replica,bucket_type=self.bucket_type)
         Stats.wait_for_warmup(self.host, self.port)
         self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
