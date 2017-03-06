@@ -723,7 +723,8 @@ class SnapshotTestCases(ParametrizedTestCase):
 class DcpTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
-        self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
+        if self.bucket_type != 'ephemeral':
+            self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
 
     def tearDown(self):
 
@@ -1599,7 +1600,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert response['status'] == SUCCESS
 
         response = self.dcp_client.stream_req(0, 0, MAX_SEQNO, MAX_SEQNO/2, 0, 0)
-        assert response.status == ERR_ECLIENT
+        assert response.status == ERR_ECLIENT  or response.status == ERR_ERANGE
 
         response = self.mcd_client.stats('dcp')
         assert 'eq_dcpq:mystream:stream_0_opaque' not in response
