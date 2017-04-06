@@ -40,7 +40,6 @@ class RestClient(object):
                                    'saslPassword': '',
                                    'ramQuotaMB': 256,
                                    'replicaNumber': replica,
-                                   'proxyPort': 11211,
                                    'bucketType': bucket_type,
                                    'threadsNumber': 3,
                                    'flushEnabled': 1}

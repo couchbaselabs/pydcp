@@ -52,10 +52,13 @@ class Stats():
         while True:
             client = McdClient(host, port)
             try:
+                client.bucket_select("default")
                 response = client.stats()
                 # check the old style or new style (as of 4.5) results
-                if response['ep_degraded_mode'] == '0' or response['ep_degraded_mode'] == 'false':
-                    break
-            except:
+                mode = response.get('ep_degraded_mode')
+                if  mode is not None:
+                    if mode == '0' or mode == 'false':
+                        break
+            except Exception as ex:
                 pass
             time.sleep(1)
