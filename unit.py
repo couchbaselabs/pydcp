@@ -136,6 +136,8 @@ class ParametrizedTestCase(unittest.TestCase):
         self.statsHandler.wait_for_warmup(self.host, self.port)
         self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
+        self.mcd_client.bucket_select("default")
+        self.dcp_client.bucket_select("default")
 
     def couchbase_backend_teardown(self):
         self.dcp_client.close()

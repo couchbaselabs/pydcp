@@ -39,13 +39,14 @@ class MemcachedClient(object):
 
     vbucketId = 0
 
-    def __init__(self, host='127.0.0.1', port=11211, timeout=30):
+    def __init__(self, host='127.0.0.1', port=11211, timeout=30, admin_user="cbadminbucket", admin_pass="password"):
         self.host = host
         self.port = port
         self.timeout = timeout
         self._createConn()
         self.r = random.Random()
         self.vbucket_count = 1024
+        self.sasl_auth_plain(admin_user, admin_pass)
 
     def _createConn(self):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
