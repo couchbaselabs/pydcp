@@ -12,6 +12,7 @@ import random
 import struct
 import exceptions
 import zlib
+from rest_client import RestClient
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
@@ -39,7 +40,7 @@ class MemcachedClient(object):
 
     vbucketId = 0
 
-    def __init__(self, host='127.0.0.1', port=11211, timeout=30, admin_user="cbadminbucket", admin_pass="password"):
+    def __init__(self, host='127.0.0.1', port=11211, timeout=30, admin_user="cbadminbucket", admin_pass="password", rest_port=8091):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -47,6 +48,15 @@ class MemcachedClient(object):
         self.r = random.Random()
         self.vbucket_count = 1024
         self.sasl_auth_plain(admin_user, admin_pass)
+
+        # auth on any existing buckets
+        rest_client = RestClient(host, port=rest_port)
+        for bucket in rest_client.get_all_buckets():
+           try:
+              self.bucket_select(bucket)
+           except Exception as ex:
+              # can be ignored...possibly warming up
+              pass
 
     def _createConn(self):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
