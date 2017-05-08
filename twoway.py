@@ -1,4 +1,4 @@
-from uprclient import UprClient
+from DcpClient import DcpClient
 from mcdclient import McdClient
 from constants import *
 import time
@@ -14,8 +14,8 @@ def get_resp(op, text):
 
 
 def two_way_demo():
-    consumer = UprClient('127.0.0.1', 5000)
-    producer = UprClient('127.0.0.1', 5001)
+    consumer = DcpClient('127.0.0.1', 5000)
+    producer = DcpClient('127.0.0.1', 5001)
     consumer.set_proxy(producer)
     producer.set_proxy(consumer)
 

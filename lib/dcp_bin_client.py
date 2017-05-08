@@ -38,10 +38,10 @@ class DcpClient(MemcachedClient):
         op = OpenConsumer(name)
         return self._open(op)
 
-    def open_producer(self, name):
+    def open_producer(self, name, xattr = False):
         """ opens an dcp producer connection """
 
-        op = OpenProducer(name)
+        op = OpenProducer(name,xattr)
         return self._open(op)
 
     def open_notifier(self, name):
@@ -187,12 +187,12 @@ class DcpClient(MemcachedClient):
         while True:
             try:
 
-                opcode, status, opaque, cas, keylen, extlen, body =\
+                opcode, status, opaque, cas, keylen, extlen, dtype, body =\
                      self._recvMsg()
 
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
-                                                    extlen, status,
+                                                    extlen, dtype, status,
                                                     cas, body, opaque)
                     return response
 
@@ -200,7 +200,7 @@ class DcpClient(MemcachedClient):
                 cached_op = self.ops.get(opaque)
                 if cached_op:
                     response = cached_op.formated_response(opcode, keylen,
-                                                           extlen, status,
+                                                           extlen, dtype, status,
                                                            cas, body, opaque)
                     # save for later
                     cached_op.queue.put(response)
@@ -214,6 +214,7 @@ class DcpClient(MemcachedClient):
                     self.ack_stream_req(opaque)
 
             except Exception as ex:
+                print ex
                 if 'died' in str(ex):
                     return  {'opcode'  : op.opcode,
                              'status'  : 0xff}
@@ -326,7 +327,7 @@ class Operation(object):
         self.opaque = opaque or random.Random().randint(0, 2 ** 32)
         self.queue = Queue.Queue()
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         return { 'opcode' : opcode,
                  'status' : status,
                  'body'   : body }
@@ -347,8 +348,11 @@ class OpenConsumer(Open):
 
 class OpenProducer(Open):
     """ Open producer spec """
-    def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_PRODUCER)
+    def __init__(self, name,xattr):
+        flags = FLAG_OPEN_PRODUCER
+        if xattr:
+            flags |= FLAG_OPEN_INCLUDE_XATTRS
+        Open.__init__(self, name, flags)
 
 class OpenNotifier(Open):
     """ Open notifier spec """
@@ -363,7 +367,7 @@ class CloseStream(Operation):
         Operation.__init__(self, opcode,
                            vbucket = vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
                      'status'        : status,
                      'value'         : body}
@@ -449,11 +453,32 @@ class StreamRequest(Operation):
 
         return adjusted_time, conflict_resolution_mode
 
+    def parse_extended_attributes(self,value, tot_len):
+        xattrs = []
+        pos = 0
+        while pos < tot_len:
+            xattr_len = struct.unpack('>I',value[pos:pos+4])[0]
+            pos = pos + 4               
+            xattr_key = ""
+            xattr_value = ""
+            # Extract the Key
+            while value[pos] != '\000':
+                xattr_key = xattr_key + value[pos]
+                pos += 1
+            pos += 1 
+            # Extract the Value
+            while value[pos] != '\000':
+                xattr_value = xattr_value + value[pos]
+                pos += 1
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+            pos += 1
+            xattrs.append((xattr_key, xattr_value))
+        return xattrs
 
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         adjusted_time = None
         conflict_resolution_mode = 0
+        xattrs = None
 
         if opcode == CMD_STREAM_REQ:
 
@@ -494,6 +519,10 @@ class StreamRequest(Operation):
             value = body[31+keylen: len(body)- ext_meta_len]
             if ext_meta_len > 0:
                 adjusted_time, conflict_resolution_mode = self.parse_extended_meta_data(body[len(body)- ext_meta_len:])
+            if (dtype & DATATYPE_XATTR):
+                total_xattr_len = struct.unpack('>I',value[0:4])[0]
+                xattrs = self.parse_extended_attributes(value[4:], total_xattr_len)
+                value = value[total_xattr_len+4:]
 
             response = { 'opcode'     : opcode,
                          'vbucket'    : status,
@@ -507,7 +536,8 @@ class StreamRequest(Operation):
                          'key'        : key,
                          'value'      : value,
                          'adjusted_time': adjusted_time,
-                         'conflict_resolution_mode': conflict_resolution_mode}
+                         'conflict_resolution_mode': conflict_resolution_mode,
+                         'xattrs'     : xattrs}
 
         elif opcode == CMD_DELETION:
             by_seqno, rev_seqno, ext_meta_len = \
@@ -560,7 +590,7 @@ class GetFailoverLog(Operation):
         Operation.__init__(self, opcode,
                            vbucket = vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
 
         failover_log = []
 
@@ -587,7 +617,7 @@ class FlowControl(Operation):
                            key = "connection_buffer_size",
                            value = str(buffer_size))
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
                      'status'        : status,
                      'body'          : body}
@@ -603,7 +633,7 @@ class GeneralControl(Operation):
                            key,
                            value)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
                      'status'        : status,
                      'body'          : body}
@@ -620,7 +650,7 @@ class Ack(Operation):
         Operation.__init__(self, opcode,
                            extras = extras)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
                      'status'        : status,
                      'error'          : body}
@@ -632,7 +662,7 @@ class Quit(Operation):
         opcode = CMD_QUIT
         Operation.__init__(self, opcode)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
                      'status'        : status}
         return response

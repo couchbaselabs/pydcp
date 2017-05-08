@@ -16,8 +16,7 @@ from rest_client import RestClient
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
-from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
+from memcacheConstants import SET_PKT_FMT, INCRDECR_RES_FMT
 import memcacheConstants
 
 class MemcachedError(exceptions.Exception):
@@ -117,10 +116,10 @@ class MemcachedClient(object):
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE)), "Got magic: %d" % magic
-        return cmd, errcode, opaque, cas, keylen, extralen, rv
+        return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv
 
     def _handleKeyedResponse(self, myopaque):
-        cmd, errcode, opaque, cas, keylen, extralen, rv = self._recvMsg()
+        cmd, errcode, opaque, cas, keylen, extralen, dtype, rv = self._recvMsg()
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode:
@@ -136,6 +135,62 @@ class MemcachedClient(object):
         """Send a command and await its response."""
         opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(cmd, key, val, opaque, extraHeader, cas)
+        return self._handleSingleResponse(opaque)
+
+
+
+    def _doSdCmd(self, cmd, key, path, val=None, expiry=0, opaque=0, cas=0, create=False, xattr=None):
+        createFlag = 0
+        if opaque == 0:
+            opaque = self.r.randint(0, 2**32)
+        if create:
+            flag = memcacheConstants.SUBDOC_FLAGS_MKDIR_P
+        if xattr:
+            flag = memcacheConstants.SUBDOC_FLAG_XATTR_PATH
+        extraHeader = struct.pack(memcacheConstants.REQ_PKT_SD_EXTRAS, len(path), flag)
+        body = path
+        if val != None:
+            body += str(val)
+        self._sendCmd(cmd, key, body, opaque, extraHeader, cas)
+        return self._handleSingleResponse(opaque)
+
+    def _doMultiSdCmd(self, cmd, key, cmdDict, opaque=0):
+        if opaque == 0:
+            opaque = self.r.randint(0, 2**32)
+        body = ''
+        extraHeader = ''
+        mcmd = None
+        for k, v  in cmdDict.iteritems():
+            if k == "store":
+                mcmd = memcacheConstants.CMD_SUBDOC_DICT_ADD
+            elif k == "counter":
+                mcmd = memcacheConstants.CMD_SUBDOC_COUNTER
+            elif k == "add_unique":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE
+            elif k == "push_first":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST
+            elif k == "push_last":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST
+            elif k == "array_insert":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_INSERT
+            elif k == "insert":
+                mcmd = memcacheConstants.CMD_SUBDOC_DICT_ADD
+            if v['create_parents'] == True:
+                flags = 1
+            else:
+                flags = 0
+            path = v['path']
+            valuelen = 0
+            if isinstance(v["value"], str):
+                value = '"' + v['value'] + '"'
+                valuelen = len(value)
+            elif isinstance(v["value"], int):
+                value = str(v['value'])
+                valuelen = len(str(value))
+            op_spec = struct.pack(memcacheConstants.REQ_PKT_SD_MULTI_MUTATE, mcmd, flags, len(path), valuelen)
+            op_spec += path + value
+            body += op_spec
+        self._sendMsg(cmd, key, body, opaque, extraHeader, cas=0)
         return self._handleSingleResponse(opaque)
 
     def _mutate(self, cmd, key, exp, flags, cas, val):
@@ -591,6 +646,86 @@ class MemcachedClient(object):
         """Set the config within the memcached server."""
         return self._doCmd(memcacheConstants.CMD_SET_CLUSTER_CONFIG, blob_conf, '')
 
+    def sd_function(fn):
+        def new_func(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except Exception:
+                raise
+        return new_func
+
+    @sd_function
+    def get_sd(self, key, path, cas=0, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_GET, key, path, cas=cas)
+
+    @sd_function
+    def exists_sd(self, key, path, opaque=0, cas=0, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas)
+
+    @sd_function
+    def dict_add_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1, xattr=None):
+        self._set_vbucket(key, vbucket)
+        #return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_ADD, key, path, value, expiry, opaque, cas, create, xattr)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_ADD, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def dict_upsert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def delete_sd(self, key, path, opaque=0, cas=0, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
+
+    @sd_function
+    def replace_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_REPLACE, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def array_push_last_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def array_push_first_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def array_add_insert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_INSERT, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
+
+
+    '''
+    usage:
+    cmdDict["add_unique"] = {"create_parents" : False, "path": array, "value": 0}
+    res  = mc.multi_mutation_sd(key, cmdDict)
+    '''
+    @sd_function
+    def multi_mutation_sd(self, key, cmdDict, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doMultiSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_MUTATION, key, cmdDict, opaque)
+
+    @sd_function
+    def multi_lookup_sd(self, key, path, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_LOOKUP, key, path, expiry, opaque, cas, create)
+
 def error_to_str(errno):
     if errno == 0x01:
         return "Not found"
@@ -622,3 +757,29 @@ def error_to_str(errno):
         return "Busy"
     elif errno == 0x86:
         return "Temporary failure"
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_ENOENT:
+        return "Path not exists"
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_MISMATCH:
+        return "Path mismatch"
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_EEXISTS:
+        return "Path exists already"
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_EINVAL:
+        return "Invalid path"
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_E2BIG:
+        return "Path too big"
+    elif errno == memcacheConstants.ERR_SUBDOC_VALUE_CANTINSERT:
+        return "Cant insert"
+    elif errno == memcacheConstants.ERR_SUBDOC_DOC_NOTJSON:
+        return "Not json"
+    elif errno == memcacheConstants.ERR_SUBDOC_NUM_ERANGE:
+        return "Num out of range"
+    elif errno == memcacheConstants.ERR_SUBDOC_DELTA_ERANGE:
+        return "Delta out of range"
+    elif errno == memcacheConstants.ERR_SUBDOC_DOC_ETOODEEP:
+        return "Doc too deep"
+    elif errno == memcacheConstants.ERR_SUBDOC_VALUE_TOODEEP:
+        return "Value too deep"
+    elif errno == memcacheConstants.ERR_SUBDOC_INVALID_CMD_COMBO:
+        return "Invalid combinations of commands"
+    elif errno == memcacheConstants.ERR_SUBDOC_MULTI_PATH_FAILURE:
+        return "Specified key was successfully found, but one or more path operations failed"
