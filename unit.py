@@ -50,11 +50,14 @@ class ParametrizedTestCase(unittest.TestCase):
         self.verification_seqno = None
         self.verification_vb = 0
         self.os_type = kwargs['os_type']
+        self.bucket_type = kwargs['bucket_type']
         self.collect_stats = kwargs['collect_stats']
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
         else:
            self.rest_port = 9000
+
+        self.statsHandler = Stats( self.bucket_type )
 
     def initialize_backend(self):
         print ''
@@ -133,10 +136,12 @@ class ParametrizedTestCase(unittest.TestCase):
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
         logging.info("Creating default bucket")
-        assert self.rest_client.create_default_bucket(self.replica)
-        Stats.wait_for_warmup(self.host, self.port)
+        assert self.rest_client.create_default_bucket(self.replica,bucket_type=self.bucket_type)
+        self.statsHandler.wait_for_warmup(self.host, self.port)
         self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
+        self.mcd_client.bucket_select("default")
+        self.dcp_client.bucket_select("default")
 
     def couchbase_backend_teardown(self):
         self.dcp_client.close()
@@ -681,7 +686,7 @@ class SnapshotTestCases(ParametrizedTestCase):
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
         assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
                                    'checkpoint')
 
@@ -724,12 +729,13 @@ class SnapshotTestCases(ParametrizedTestCase):
 class DcpTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
-        self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
+        if self.bucket_type != 'ephemeral':
+            self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
 
     def tearDown(self):
 
-        if self.verification_seqno is not None:
-            Stats.wait_for_persistence(self.mcd_client)
+        if self.verification_seqno is not None and self.bucket_type != 'ephemeral':
+            self.statsHandler.wait_for_persistence(self.mcd_client)
             persisted_seqno = self.get_persisted_seq_no(self.verification_vb)
             assert self.verification_seqno == persisted_seqno, \
                   'invalid persisted sequence number. Expected {0}, actual {1}'.\
@@ -1045,7 +1051,7 @@ class DcpTestCase(ParametrizedTestCase):
         stats = self.mcd_client.stats('dcp')
         assert stats['ep_dcp_count'] == str(n)
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 
     """
@@ -1162,7 +1168,7 @@ class DcpTestCase(ParametrizedTestCase):
             """ load 3 and persist """
             set_ops = [self.mcd_client.set('key%s'%i, 0, 0, 'value', 0)\
                                                             for x in range(3)]
-            Stats.wait_for_persistence(self.mcd_client)
+            self.statsHandler.wait_for_persistence(self.mcd_client)
 
         def stream(end, vb_uuid):
             backfilled = False
@@ -1374,7 +1380,7 @@ class DcpTestCase(ParametrizedTestCase):
         n = 16
         for i in xrange(100):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         # add stream to be close by different client
         client2 = DcpClient(self.host, self.port)
@@ -1600,7 +1606,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert response['status'] == SUCCESS
 
         response = self.dcp_client.stream_req(0, 0, MAX_SEQNO, MAX_SEQNO/2, 0, 0)
-        assert response.status == ERR_ECLIENT
+        assert response.status == ERR_ECLIENT  or response.status == ERR_ERANGE
 
         response = self.mcd_client.stats('dcp')
         assert 'eq_dcpq:mystream:stream_0_opaque' not in response
@@ -1658,7 +1664,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.status == SUCCESS
         stream.run()
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 
 
@@ -1830,7 +1836,7 @@ class DcpTestCase(ParametrizedTestCase):
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 
         # drop deletes is important for this scenario
@@ -1950,7 +1956,7 @@ class DcpTestCase(ParametrizedTestCase):
         self.mcd_client.set('key4', 0, 0, 'value', 0)
         self.mcd_client.set('key5', 0, 0, 'value', 0)
         self.mcd_client.set('key6', 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
         self.mcd_client.delete('key1', 0, 0)
         self.mcd_client.delete('key2', 0, 0)
 
@@ -2169,7 +2175,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         for i in xrange(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         resp = self.mcd_client.stats('failovers')
         vb_uuid = long(resp['vb_0:0:id'])
@@ -2364,7 +2370,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         stats = self.mcd_client.stats()
         num_expired = stats['vb_active_expired']
@@ -2392,7 +2398,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
         stats = self.mcd_client.stats()
         num_expired = int(stats['vb_active_expired'])
         if num_expired == 0:
@@ -2653,7 +2659,7 @@ class DcpTestCase(ParametrizedTestCase):
         # persist mutations
         for i in range(mutations):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         tries = 10
         while tries > 0:
@@ -2708,7 +2714,7 @@ class DcpTestCase(ParametrizedTestCase):
             assert seqno == mutations,\
                 "%s != %s" % (seqno, mutations)
 
-            Stats.wait_for_persistence(self.mcd_client)
+            self.statsHandler.wait_for_persistence(self.mcd_client)
             assert self.get_persisted_seq_no(vb) == seqno
 
 
@@ -2848,7 +2854,7 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         by_seqno_list = []
         mutation_count = []
@@ -2887,7 +2893,7 @@ class DcpTestCase(ParametrizedTestCase):
         proc1.join()
 
         # wait for server to be up
-        Stats.wait_for_warmup(self.host, self.port)
+        self.statsHandler.wait_for_warmup(self.host, self.port)
         self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
 
@@ -2910,7 +2916,7 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
@@ -3046,7 +3052,7 @@ class McdTestCase(ParametrizedTestCase):
 
         assert state == 'paused'
         self.mcd_client.start_persistence()
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 class RebTestCase(ParametrizedTestCase):
 
