@@ -137,7 +137,8 @@ class ParametrizedTestCase(unittest.TestCase):
             assert self.rest_client.delete_bucket(bucket)
         logging.info("Creating default bucket")
         assert self.rest_client.create_default_bucket(self.replica,bucket_type=self.bucket_type)
-        self.statsHandler.wait_for_warmup(self.host, self.port)
+        time.sleep(7)
+        #self.statsHandler.wait_for_warmup(self.host, self.port)
         self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
         self.mcd_client.bucket_select("default")
@@ -150,7 +151,6 @@ class ParametrizedTestCase(unittest.TestCase):
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
         self.rest_client = None
-
 
     def _execute_command(self, cmd ):
 
@@ -3485,8 +3485,6 @@ class RebTestCase(ParametrizedTestCase):
 class XATTRTestCases(ParametrizedTestCase):
     MUTATION_COUNT = 20
 
-    # cb = Bucket("couchbase://172.23.106.88/default")
-
     def setUp(self):
         self.initialize_backend()
 
@@ -3495,15 +3493,9 @@ class XATTRTestCases(ParametrizedTestCase):
         for i in range(count):
             for j in range(vbuckets):
                 self.mcd_client.set('key' + str(i) + "_" + str(j), 0, 0, json.dumps({}), vbucket=j)
-                # self.mcd_client.cb.mutate_in('key' + str(i), SD.upsert("k", "v", xattr=True))
-                self.mcd_client.dict_add_sd('key' + str(i) + "_" + str(j), 'path', json.dumps({}), expiry=0, opaque=0,
+                self.mcd_client.dict_add_sd('key' + str(i) + "_" + str(j), 'path', json.dumps({"xattr_value": str(i) + "_" + str(j)}), expiry=0, opaque=0,
                                             cas=0, create=True, xattr=True, vbucket=j)
-                # rv = self.cb.lookup_in('key' + str(i) + "_" + str(j), SD.get('path', xattr=True))
-                # self.assertTrue(rv.exists('path'))
                 time.sleep(0.010)
-                print i, j
-
-                # consume the streams for all vbuckets. Index is a unique stream identifier
 
     def consume_all_streams(self, dcp_client, vbucket_count, index=1):
 
@@ -3516,6 +3508,47 @@ class XATTRTestCases(ParametrizedTestCase):
             stream.run(XATTRTestCases.MUTATION_COUNT)
             print "stream.last_by_seqno:", stream.last_by_seqno
             assert stream.last_by_seqno == XATTRTestCases.MUTATION_COUNT
+
+    def add_stream(self, client_count=1, vbucket=1):
+        print 'Creating DCP Client Object'
+        dcp_client = DcpClient('127.0.0.1', 11210, timeout=300)
+
+        print 'Sending open connection (consumer)'
+        response = dcp_client.open_producer("haiko1980", xattr=True)
+        assert response['status'] == SUCCESS
+        print "Success"
+
+        print 'Sending add stream request'
+        time.sleep(5)
+        op = dcp_client.stream_req(vbucket-1, 0, 0, XATTRTestCases.MUTATION_COUNT, 0)
+        no_responces =0
+        responces = []
+        while True:
+            if op.has_response():
+                response = op.next_response()
+                print "response:", response
+                print 'Got response: ', response['opcode']
+                if response is None:
+                    continue
+                elif response['opcode'] == CMD_STREAM_REQ:# 83
+                    assert response['status'] == SUCCESS
+                elif response['opcode'] == CMD_MUTATION: #87
+                    vb = response['vbucket']
+                    key = response['key']
+                    seqno = response['value']
+                    xattrs = response['xattrs']
+                    print 'VB: %d got key %s with xattrs %s' % (vb, key, xattrs)
+                    responces.append(response)
+                elif response['opcode'] == CMD_STREAM_END:  #85
+                    print "CMD_STREAM_END!!!"
+                    break
+                    # op = dcp_client.stream_req(vb, 0, 0, 2, 0)
+            else:
+                # print 'No response'
+                no_responces += 1
+        print 'responces: %s ' % len(responces)
+        assert (XATTRTestCases.MUTATION_COUNT +1) == len(responces)
+        dcp_client.quit()
 
     """ This is the main routine - takes as parameter the number of clients and vbuckets and
         verifies the clients receive streams.
@@ -3541,46 +3574,21 @@ class XATTRTestCases(ParametrizedTestCase):
         for i in consumer_threads:
             i.start()
 
-        self.add_stream()
+        self.add_stream(client_count=client_count, vbucket=vbucket_count)
 
         for i in consumer_threads:
             i.join()
 
-    def add_stream(self):
-        print 'Creating DCP Client Object'
-        dcp_client = DcpClient('127.0.0.1', 11210, timeout=300)
+        mutation_thread.join()
 
-        print 'Sending open connection (consumer)'
-        response = dcp_client.open_producer("haiko1980", xattr=True)
-        assert response['status'] == SUCCESS
-        print "Success"
+    def test_many_clients_1_vbucket_1_client(self):
+        self.vary_by_clients_streams_and_vbuckets(1, 1)
 
-        print 'Sending add stream request'
-        vb = 1
-        end_seq_no = 0xffffffffffffffff
-        op = dcp_client.stream_req(vb, 0, 0, end_seq_no, 0, 0)
-
-        while True:
-            if op.has_response():
-                response = op.next_response()
-                print "response:", response
-                print 'Got response: ', response['opcode']
-                if response['opcode'] == CMD_STREAM_REQ:
-                    assert response['status'] == SUCCESS
-                elif response['opcode'] == CMD_MUTATION:
-                    vb = response['vbucket']
-                    key = response['key']
-                    seqno = response['value']
-                    xattrs = response['xattrs']
-                    print 'VB: %d got key %s with xattrs %s' % (vb, key, xattrs)
-            else:
-                print 'No response'
-
-        dcp_client.shutdown()
-
-    def test_many_clients_1_vbucket(self):
+    def test_many_clients_1_vbucket_10_clients(self):
         self.vary_by_clients_streams_and_vbuckets(5, 1)
 
+    def test_many_clients_5_vbucket_10_clients(self):
+        self.vary_by_clients_streams_and_vbuckets(10, 5)
+
     def tearDown(self):
-        pass
-        self.destroy_backend()
+         self.destroy_backend()
