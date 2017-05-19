@@ -321,7 +321,10 @@ class MemcachedClient(object):
                            struct.pack('>QQBBHL', purge_before_ts, purge_before_seq, drop_deletes, 0, 0, 0))
 
 
-
+    def hello(self, features):
+        """Send a hello command for feature checking"""
+        #MB-11902
+        return self._doCmd(couchbaseConstants.CMD_HELLO, '', struct.pack('>H' * len(features), *features))
 
     def touch(self, key, exp, vbucket= -1):
         """Touch a key in the memcached server."""

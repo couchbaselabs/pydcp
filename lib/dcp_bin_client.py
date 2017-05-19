@@ -38,10 +38,10 @@ class DcpClient(MemcachedClient):
         op = OpenConsumer(name)
         return self._open(op)
 
-    def open_producer(self, name, xattr = False):
+    def open_producer(self, name, xattr = False, collection = False, json = ''):
         """ opens an dcp producer connection """
 
-        op = OpenProducer(name,xattr)
+        op = OpenProducer(name,xattr,collection,json)
         return self._open(op)
 
     def open_notifier(self, name):
@@ -335,11 +335,11 @@ class Operation(object):
 class Open(Operation):
     """ Open connection base class """
 
-    def __init__(self, name, flag):
+    def __init__(self, name, flag, json):
         opcode = CMD_OPEN
         key = name
         extras = struct.pack(">iI", 0, flag)
-        Operation.__init__(self, opcode, key, extras = extras)
+        Operation.__init__(self, opcode, key, value=json, extras = extras)
 
 class OpenConsumer(Open):
     """ Open consumer spec """
@@ -348,11 +348,14 @@ class OpenConsumer(Open):
 
 class OpenProducer(Open):
     """ Open producer spec """
-    def __init__(self, name,xattr):
+
+    def __init__(self, name,xattr,collection, json):
         flags = FLAG_OPEN_PRODUCER
         if xattr:
             flags |= FLAG_OPEN_INCLUDE_XATTRS
-        Open.__init__(self, name, flags)
+        if collection:
+            flags |= FLAG_OPEN_COLLECTIONS    
+        Open.__init__(self, name, flags, json)
 
 class OpenNotifier(Open):
     """ Open notifier spec """
@@ -513,10 +516,10 @@ class StreamRequest(Operation):
                          'flags'   : flags }
 
         elif opcode == CMD_MUTATION:
-            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
-                struct.unpack(">QQIIIHB", body[0:31])
-            key = body[31:31+keylen]
-            value = body[31+keylen: len(body)- ext_meta_len]
+            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru, clen = \
+                struct.unpack(">QQIIIHBB", body[0:32])
+            key = body[32:32+keylen]
+            value = body[32+keylen: len(body)- ext_meta_len]
             if ext_meta_len > 0:
                 adjusted_time, conflict_resolution_mode = self.parse_extended_meta_data(body[len(body)- ext_meta_len:])
             if (dtype & DATATYPE_XATTR):
@@ -537,7 +540,8 @@ class StreamRequest(Operation):
                          'value'      : value,
                          'adjusted_time': adjusted_time,
                          'conflict_resolution_mode': conflict_resolution_mode,
-                         'xattrs'     : xattrs}
+                         'xattrs'     : xattrs,
+                         'collection_len' : clen}
 
         elif opcode == CMD_DELETION:
             by_seqno, rev_seqno, ext_meta_len = \
@@ -575,6 +579,14 @@ class StreamRequest(Operation):
                          'snap_end_seqno'   : snap_end,
                          'flag'   : flag }
 
+        elif opcode == 0x5f:
+            seqno, event =\
+                struct.unpack(">QI", body[0:12])
+            key = body[12:12+keylen]
+            response = { 'opcode' : opcode,
+                         'seqno' : seqno,
+                         'event' : event,
+                         'key' : key}
         else:
             response = { 'err_msg' : "(Stream Request) Unknown response",
                          'opcode'  :  opcode,

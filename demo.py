@@ -6,10 +6,13 @@ from uprclient import UprClient
 from mcdclient import McdClient
 from constants import *
 
+import mc_bin_client
+import dcp_bin_client
+
 def simple_handshake_demo():
     upr_client = UprClient('127.0.0.1', 12000)
     mcd_client = McdClient('127.0.0.1', 12000)
-    op = upr_client.open_producer("mystream")
+    op = upr_client.open_producer("mystream", FLAG_OPEN_COLLECTIONS)
     print 'Sending open connection (producer)'
     print op
     response = op.next_response()
@@ -114,7 +117,10 @@ def multiple_streams(host, port):
     upr_client.shutdown()
     mcd_client.shutdown()
 
+def collection_stream(host, port)
+
+
 if __name__ == "__main__":
     #simple_handshake_demo()
     #add_stream_demo()
-    multiple_streams('127.0.0.1', 12000)
+    collection_stream('127.0.0.1', 12000)
