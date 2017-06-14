@@ -2,47 +2,117 @@
 
 import pprint
 import time
-
+import sys
 from lib.dcp_bin_client import DcpClient
 from lib.mc_bin_client import MemcachedClient as McdClient
-from constants import *
+from lib.mc_bin_client import MemcachedError
 
-def add_stream():
-    print 'Creating DCP Client Object'
-    dcp_client = DcpClient('10.142.170.101', 11210)
+from constants import *
+import argparse
+
+
+def handle_stream_create_response(dcpStream):
+    if dcpStream.status == SUCCESS:
+        print "Stream Opened Succesfully"
+    elif dcpStream.status == ERR_NOT_MY_VBUCKET:
+        print "TODO: HANDLE NOT MY VBUCKET"
+        vb_map = response['err_msg']
+        sys.exit(1)
+    elif dcpStream.status == ERR_ROLLBACK:
+        print "TODO: HANDLE ROLLBACK REQUEST"
+        sys.exit(1)
+    else:
+        print "Unhandled Stream Create Response", dcpStream.status
+        sys.exit(1)
+
+def handleMutation(response):
+    vb = response['vbucket']
+    seqno =  response['by_seqno']
+    output_string = ""
+    if args.keys:
+        output_string = "KEY:" + response['key']
+    if args.docs:
+        output_string += "BODY:" + response['value']   
+    if args.xattrs:
+        if 'xattrs' in response:
+            output_string += " XATTRS:" + response['xattrs']
+        else:
+            output_string += " XATTRS: - "
+    if output_string != "":
+        print seqno, output_string
+
+def process_dcp_traffic(stream,args):
+    complete = False
+    key_count = 0
+
+    while not complete:
+        print "\rReceived " + str(key_count) + " keys" ,
+        sys.stdout.flush()
+        if stream.has_response():
+            response = stream.next_response()
+            if response == None:
+                print "\nNo response / Stream complete"
+                complete = True
+            elif response['opcode'] == CMD_STREAM_REQ:
+                print "\nwasn't expecting a stream request"
+            elif response['opcode'] == CMD_MUTATION:
+                handleMutation(response)
+                key_count += 1
+            elif response['opcode'] == CMD_SNAPSHOT_MARKER:
+                print "\nReceived snapshot marker"
+            else:
+                print response['opcode']
+        else: 
+            print '\nNo response'
+    dcp_client.close()
+
+def add_stream(args):
+    node = args.node
+    bucket = args.bucket
+    vb_list = args.vbuckets
+    start_seq_no = args.start
+    end_seq_no = args.end
+    stream_xattrs = args.xattrs
+
+    global dcp_client
+    dcp_client = DcpClient(node, 11210)
+    print 'Connected to:',node
     
-    print 'Performing SASL Auth to Bucket'
-    response = dcp_client.sasl_auth_plain('all_about_that_base', '')
-    
-    print 'Sending open connection (consumer)'
-    response = dcp_client.open_producer("haiko1980",xattr=True)
+    try:
+        response = dcp_client.sasl_auth_plain(bucket, '')
+    except MemcachedError as err:
+        print err
+        sys.exit(1)
+    print "Successfully AUTHed to ", bucket
+
+    response = dcp_client.open_producer("traun",xattr=stream_xattrs)
     assert response['status'] == SUCCESS
-    print "Success"
+    print "Opened DCP consumer connection"
 
 
     print 'Sending add stream request'
-    vb = 321
-    end_seq_no = 0xffffffffffffffff
-    op = dcp_client.stream_req(vb, 0, 0, end_seq_no, 0, 0)
 
-    while True:
-        if op.has_response():
-            response = op.next_response()
-            print 'Got response: ',response['opcode']
-            if response['opcode'] == CMD_STREAM_REQ:
-                assert response['status'] == SUCCESS
-            elif response['opcode'] == CMD_MUTATION:
-                vb = response['vbucket']
-                key = response['key']
-                seqno =  response['value']
-                xattrs = response['xattrs']
-                print 'VB: %d got key %s with seqno %s' % (vb, key, xattrs)
-        else: 
-            print 'No response'
+    stream = dcp_client.stream_req(vbucket=vb_list[0], takeover=0, \
+             start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=0)
+    handle_stream_create_response(stream)
+    return stream
        
-    dcp_client.shutdown()
-    mcd_client.shutdown()
+def parseArguments():
+  parser = argparse.ArgumentParser(description='Create a simple DCP Consumer')
+  parser.add_argument('--node', '-n', default="localhost", help='Cluster Node to connect to')
+  parser.add_argument('--bucket', '-b', default="default", help='Bucket to connect to')
+  parser.add_argument('--vbuckets', '-v',nargs='+',default=[1],  help='Vbuckets to stream')
+  parser.add_argument('--start', '-s',default=0, type=int, help='start seq_num')
+  parser.add_argument('--end', '-e',default=0xffffffffffffffff, type=int, help='end seq_num')
+  parser.add_argument('--xattrs', '-x', help='Include Extended Attributes', default=False, action="store_true")
+  parser.add_argument('--keys', '-k', help='Dump keys', default=False, action="store_true")
+  parser.add_argument('--docs', '-d', help='Dump document', default=False, action="store_true")
+  return parser.parse_args()
+
+
 
 
 if __name__ == "__main__":
-    add_stream()
+    args = parseArguments()
+    stream = add_stream(args)
+    process_dcp_traffic(stream,args)
