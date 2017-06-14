@@ -3,6 +3,10 @@ import logging
 import time
 import random
 import struct
+import couchbase.subdocument as SD
+import json
+
+from couchbase.bucket import Bucket, SD
 
 try:
     import unittest2 as unittest
@@ -46,11 +50,14 @@ class ParametrizedTestCase(unittest.TestCase):
         self.verification_seqno = None
         self.verification_vb = 0
         self.os_type = kwargs['os_type']
+        self.bucket_type = kwargs['bucket_type']
         self.collect_stats = kwargs['collect_stats']
         if host.find(':') != -1:
            self.host, self.rest_port = host.split(':')
         else:
            self.rest_port = 9000
+
+        self.statsHandler = Stats( self.bucket_type )
 
     def initialize_backend(self):
         print ''
@@ -129,10 +136,13 @@ class ParametrizedTestCase(unittest.TestCase):
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
         logging.info("Creating default bucket")
-        assert self.rest_client.create_default_bucket(self.replica)
-        Stats.wait_for_warmup(self.host, self.port)
+        assert self.rest_client.create_default_bucket(self.replica,bucket_type=self.bucket_type)
+        time.sleep(7)
+        #self.statsHandler.wait_for_warmup(self.host, self.port)
         self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
+        self.mcd_client.bucket_select("default")
+        self.dcp_client.bucket_select("default")
 
     def couchbase_backend_teardown(self):
         self.dcp_client.close()
@@ -141,7 +151,6 @@ class ParametrizedTestCase(unittest.TestCase):
             logging.info("Deleting bucket %s" % bucket)
             assert self.rest_client.delete_bucket(bucket)
         self.rest_client = None
-
 
     def _execute_command(self, cmd ):
 
@@ -677,7 +686,7 @@ class SnapshotTestCases(ParametrizedTestCase):
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
         assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
                                    'checkpoint')
 
@@ -720,12 +729,13 @@ class SnapshotTestCases(ParametrizedTestCase):
 class DcpTestCase(ParametrizedTestCase):
     def setUp(self):
         self.initialize_backend()
-        self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
+        if self.bucket_type != 'ephemeral':
+            self.db_file_location = Stats.get_stat( self.mcd_client, 'ep_dbname' )
 
     def tearDown(self):
 
-        if self.verification_seqno is not None:
-            Stats.wait_for_persistence(self.mcd_client)
+        if self.verification_seqno is not None and self.bucket_type != 'ephemeral':
+            self.statsHandler.wait_for_persistence(self.mcd_client)
             persisted_seqno = self.get_persisted_seq_no(self.verification_vb)
             assert self.verification_seqno == persisted_seqno, \
                   'invalid persisted sequence number. Expected {0}, actual {1}'.\
@@ -1041,7 +1051,7 @@ class DcpTestCase(ParametrizedTestCase):
         stats = self.mcd_client.stats('dcp')
         assert stats['ep_dcp_count'] == str(n)
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 
     """
@@ -1158,7 +1168,7 @@ class DcpTestCase(ParametrizedTestCase):
             """ load 3 and persist """
             set_ops = [self.mcd_client.set('key%s'%i, 0, 0, 'value', 0)\
                                                             for x in range(3)]
-            Stats.wait_for_persistence(self.mcd_client)
+            self.statsHandler.wait_for_persistence(self.mcd_client)
 
         def stream(end, vb_uuid):
             backfilled = False
@@ -1370,7 +1380,7 @@ class DcpTestCase(ParametrizedTestCase):
         n = 16
         for i in xrange(100):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         # add stream to be close by different client
         client2 = DcpClient(self.host, self.port)
@@ -1596,7 +1606,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert response['status'] == SUCCESS
 
         response = self.dcp_client.stream_req(0, 0, MAX_SEQNO, MAX_SEQNO/2, 0, 0)
-        assert response.status == ERR_ECLIENT
+        assert response.status == ERR_ECLIENT  or response.status == ERR_ERANGE
 
         response = self.mcd_client.stats('dcp')
         assert 'eq_dcpq:mystream:stream_0_opaque' not in response
@@ -1654,7 +1664,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.status == SUCCESS
         stream.run()
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 
 
@@ -1826,7 +1836,7 @@ class DcpTestCase(ParametrizedTestCase):
         resp = self.mcd_client.stats('vbucket-seqno')
         end_seqno = int(resp['vb_0:high_seqno'])
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 
         # drop deletes is important for this scenario
@@ -1946,7 +1956,7 @@ class DcpTestCase(ParametrizedTestCase):
         self.mcd_client.set('key4', 0, 0, 'value', 0)
         self.mcd_client.set('key5', 0, 0, 'value', 0)
         self.mcd_client.set('key6', 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
         self.mcd_client.delete('key1', 0, 0)
         self.mcd_client.delete('key2', 0, 0)
 
@@ -2165,7 +2175,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         for i in xrange(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         resp = self.mcd_client.stats('failovers')
         vb_uuid = long(resp['vb_0:0:id'])
@@ -2360,7 +2370,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         stats = self.mcd_client.stats()
         num_expired = stats['vb_active_expired']
@@ -2388,7 +2398,7 @@ class DcpTestCase(ParametrizedTestCase):
         assert stream.last_by_seqno == 2
         assert int(responses[1]['expiration']) > 0
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
         stats = self.mcd_client.stats()
         num_expired = int(stats['vb_active_expired'])
         if num_expired == 0:
@@ -2649,7 +2659,7 @@ class DcpTestCase(ParametrizedTestCase):
         # persist mutations
         for i in range(mutations):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         tries = 10
         while tries > 0:
@@ -2704,7 +2714,7 @@ class DcpTestCase(ParametrizedTestCase):
             assert seqno == mutations,\
                 "%s != %s" % (seqno, mutations)
 
-            Stats.wait_for_persistence(self.mcd_client)
+            self.statsHandler.wait_for_persistence(self.mcd_client)
             assert self.get_persisted_seq_no(vb) == seqno
 
 
@@ -2844,7 +2854,7 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         by_seqno_list = []
         mutation_count = []
@@ -2883,7 +2893,7 @@ class DcpTestCase(ParametrizedTestCase):
         proc1.join()
 
         # wait for server to be up
-        Stats.wait_for_warmup(self.host, self.port)
+        self.statsHandler.wait_for_warmup(self.host, self.port)
         self.dcp_client = DcpClient(self.host, self.port)
         self.mcd_client = McdClient(self.host, self.port)
 
@@ -2906,7 +2916,7 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
 
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
         response = self.dcp_client.open_producer("mystream")
         assert response['status'] == SUCCESS
@@ -3042,7 +3052,7 @@ class McdTestCase(ParametrizedTestCase):
 
         assert state == 'paused'
         self.mcd_client.start_persistence()
-        Stats.wait_for_persistence(self.mcd_client)
+        self.statsHandler.wait_for_persistence(self.mcd_client)
 
 class RebTestCase(ParametrizedTestCase):
 
@@ -3466,7 +3476,119 @@ class RebTestCase(ParametrizedTestCase):
         assert resp['vb_active_curr_items'] == str( doc_count )
 
 
-        replica_resp = mcd_clientB.stats()
+        replica_resp = mcd_client.stats()
         assert replica_resp['vb_replica_curr_items'] == str( doc_count ), \
             'Incorrect vb_replica_curr_items. Expected {0}, actual {1}'.\
                 format(doc_count, resp['vb_replica_curr_items'])
+
+
+class XATTRTestCases(ParametrizedTestCase):
+    MUTATION_COUNT = 20
+
+    def setUp(self):
+        self.initialize_backend()
+
+    # Set 'count' keys on the given vbuckets
+    def set_keys_on_all_vbuckets(self, count, vbuckets):
+        for i in range(count):
+            for j in range(vbuckets):
+                self.mcd_client.set('key' + str(i) + "_" + str(j), 0, 0, json.dumps({}), vbucket=j)
+                self.mcd_client.dict_add_sd('key' + str(i) + "_" + str(j), 'path', json.dumps({"xattr_value": str(i) + "_" + str(j)}), expiry=0, opaque=0,
+                                            cas=0, create=True, xattr=True, vbucket=j)
+                time.sleep(0.010)
+
+    def consume_all_streams(self, dcp_client, vbucket_count, index=1):
+
+        response = dcp_client.open_producer("mystream" + str(index))
+        assert response['status'] == SUCCESS
+
+        for i in range(vbucket_count):
+            stream = dcp_client.stream_req(i, 0, 0, XATTRTestCases.MUTATION_COUNT, 0)
+            assert stream.status == SUCCESS
+            stream.run(XATTRTestCases.MUTATION_COUNT)
+            print "stream.last_by_seqno:", stream.last_by_seqno
+            assert stream.last_by_seqno == XATTRTestCases.MUTATION_COUNT
+
+    def add_stream(self, client_count=1, vbucket=1):
+        print 'Creating DCP Client Object'
+        dcp_client = DcpClient('127.0.0.1', 11210, timeout=300)
+
+        print 'Sending open connection (consumer)'
+        response = dcp_client.open_producer("haiko1980", xattr=True)
+        assert response['status'] == SUCCESS
+        print "Success"
+
+        print 'Sending add stream request'
+        time.sleep(5)
+        op = dcp_client.stream_req(vbucket-1, 0, 0, XATTRTestCases.MUTATION_COUNT, 0)
+        no_responces =0
+        responces = []
+        while True:
+            if op.has_response():
+                response = op.next_response()
+                print "response:", response
+                print 'Got response: ', response['opcode']
+                if response is None:
+                    continue
+                elif response['opcode'] == CMD_STREAM_REQ:# 83
+                    assert response['status'] == SUCCESS
+                elif response['opcode'] == CMD_MUTATION: #87
+                    vb = response['vbucket']
+                    key = response['key']
+                    seqno = response['value']
+                    xattrs = response['xattrs']
+                    print 'VB: %d got key %s with xattrs %s' % (vb, key, xattrs)
+                    responces.append(response)
+                elif response['opcode'] == CMD_STREAM_END:  #85
+                    print "CMD_STREAM_END!!!"
+                    break
+                    # op = dcp_client.stream_req(vb, 0, 0, 2, 0)
+            else:
+                # print 'No response'
+                no_responces += 1
+        print 'responces: %s ' % len(responces)
+        assert (XATTRTestCases.MUTATION_COUNT +1) == len(responces)
+        dcp_client.quit()
+
+    """ This is the main routine - takes as parameter the number of clients and vbuckets and
+        verifies the clients receive streams.
+    """
+
+    def vary_by_clients_streams_and_vbuckets(self, client_count, vbucket_count):
+
+        dcp_clients = []
+        for i in range(client_count):
+            dcp_clients.append(DcpClient(self.host, self.port))
+
+        # concurrently set the keys
+        mutation_thread = Thread(target=self.set_keys_on_all_vbuckets,
+                                 args=(XATTRTestCases.MUTATION_COUNT, vbucket_count,))
+        mutation_thread.start()
+        # don't do a join, let the mutations run concurrently with the stream
+
+        consumer_threads = []
+        for i in range(client_count):
+            consumer_threads.append(Thread(target=self.consume_all_streams,
+                                           args=(dcp_clients[i], vbucket_count, i)))
+
+        for i in consumer_threads:
+            i.start()
+
+        self.add_stream(client_count=client_count, vbucket=vbucket_count)
+
+        for i in consumer_threads:
+            i.join()
+
+        mutation_thread.join()
+
+    def test_many_clients_1_vbucket_1_client(self):
+        self.vary_by_clients_streams_and_vbuckets(1, 1)
+
+    def test_many_clients_1_vbucket_10_clients(self):
+        self.vary_by_clients_streams_and_vbuckets(5, 1)
+
+    def test_many_clients_5_vbucket_10_clients(self):
+        self.vary_by_clients_streams_and_vbuckets(10, 5)
+
+    def tearDown(self):
+         self.destroy_backend()
