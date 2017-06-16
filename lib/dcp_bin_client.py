@@ -11,8 +11,8 @@ class DcpClient(MemcachedClient):
     """ DcpClient implements dcp protocol using mc_bin_client as base
         for sending and receiving commands """
 
-    def __init__(self, host='127.0.0.1', port=11210, timeout=30):
-        super(DcpClient, self).__init__(host, port, timeout)
+    def __init__(self, host='127.0.0.1', port=11210, timeout=30,do_auth=True):
+        super(DcpClient, self).__init__(host, port, timeout, do_auth=do_auth)
 
         # recv timeout
         self.timeout = timeout
@@ -24,6 +24,9 @@ class DcpClient(MemcachedClient):
         self.ops = {}
 
         self.dead = False
+
+        # open_producer defines if collections are being streamed
+        self.collections = False
 
     def _open(self, op):
         return self._handle_op(op)
@@ -38,10 +41,10 @@ class DcpClient(MemcachedClient):
         op = OpenConsumer(name)
         return self._open(op)
 
-    def open_producer(self, name, xattr = False, collection = False, json = ''):
+    def open_producer(self, name, xattr = False, collections = False, json = ''):
         """ opens an dcp producer connection """
-
-        op = OpenProducer(name,xattr,collection,json)
+        self.collections = collections
+        op = OpenProducer(name,xattr,collections,json)
         return self._open(op)
 
     def open_notifier(self, name):
@@ -122,7 +125,7 @@ class DcpClient(MemcachedClient):
              snap_end = end seqno of snapshot """
 
         op = StreamRequest(vbucket, takeover, start_seqno, end_seqno,
-                                        vb_uuid, snap_start, snap_end)
+                            vb_uuid, snap_start, snap_end,collections=self.collections)
 
         response = self._handle_op(op)
 
@@ -214,7 +217,7 @@ class DcpClient(MemcachedClient):
                     self.ack_stream_req(opaque)
 
             except Exception as ex:
-                print ex
+                print "recv_op Exception:", ex
                 if 'died' in str(ex):
                     return  {'opcode'  : op.opcode,
                              'status'  : 0xff}
@@ -398,7 +401,8 @@ class StreamRequest(Operation):
     """ StreamRequest spec """
 
     def __init__(self, vbucket, takeover, start_seqno, end_seqno,
-                 vb_uuid, snap_start = None, snap_end = None):
+                 vb_uuid, snap_start = None, snap_end = None, 
+                 collections = False):
 
         if snap_start is None:
             snap_start = start_seqno
@@ -422,6 +426,7 @@ class StreamRequest(Operation):
         self.takeover = takeover
         self.snap_start = snap_start
         self.snap_end = snap_end
+        self.collection_filtering = collections
 
     def parse_extended_meta_data(self, extended_meta_data):
         # extended metadata is described here
@@ -482,6 +487,7 @@ class StreamRequest(Operation):
         adjusted_time = None
         conflict_resolution_mode = 0
         xattrs = None
+        clen = 0
 
         if opcode == CMD_STREAM_REQ:
 
@@ -516,10 +522,16 @@ class StreamRequest(Operation):
                          'flags'   : flags }
 
         elif opcode == CMD_MUTATION:
-            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru, clen = \
-                struct.unpack(">QQIIIHBB", body[0:32])
-            key = body[32:32+keylen]
-            value = body[32+keylen: len(body)- ext_meta_len]
+            if self.collection_filtering:
+                header_len = 32
+                by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru, clen = \
+                    struct.unpack(">QQIIIHBB", body[0:header_len])
+            else:
+                header_len = 31
+                by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
+                    struct.unpack(">QQIIIHB", body[0:header_len])
+            key = body[header_len:header_len+keylen]
+            value = body[header_len+keylen: len(body)- ext_meta_len]
             if ext_meta_len > 0:
                 adjusted_time, conflict_resolution_mode = self.parse_extended_meta_data(body[len(body)- ext_meta_len:])
             if (dtype & DATATYPE_XATTR):
