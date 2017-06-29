@@ -6,7 +6,7 @@ import struct
 import couchbase.subdocument as SD
 import json
 
-from couchbase.bucket import Bucket, SD
+from couchbase.bucket import Bucket
 
 try:
     import unittest2 as unittest
