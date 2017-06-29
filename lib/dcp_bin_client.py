@@ -644,7 +644,7 @@ class Ack(Operation):
     """ Ack spec """
 
     def __init__(self, nbytes):
-        opcode = CMD_UPR_ACK
+        opcode = CMD_DCP_ACK
         self.nbytes = nbytes
         extras = struct.pack(">L", self.nbytes)
         Operation.__init__(self, opcode,
