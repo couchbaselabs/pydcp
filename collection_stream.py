@@ -19,10 +19,11 @@ def collection_stream(host, port, user, password, bucket, filterFile):
     print "DCP Open filter: {}".format(json)
 
     op = dcp_client.open_producer("mystream", 0x10, json)
+    op = dcp_client.general_control("enable_noop", "true")
     op = dcp_client.stream_req(0, 0, 0, 0xffffffffffffffff, 0)
     while op.has_response():
         response = op.next_response()
-        #print response
+        # print response
         if response:
             if response['opcode'] == constants.CMD_MUTATION:
                 clen = response['collection_len']
