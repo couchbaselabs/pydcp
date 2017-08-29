@@ -2264,6 +2264,7 @@ class DcpTestCase(ParametrizedTestCase):
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
+        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == val
@@ -2285,6 +2286,7 @@ class DcpTestCase(ParametrizedTestCase):
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
+        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == val
@@ -2305,6 +2307,7 @@ class DcpTestCase(ParametrizedTestCase):
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
+        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == '200'
@@ -2326,6 +2329,7 @@ class DcpTestCase(ParametrizedTestCase):
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
+        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == '0'
@@ -2346,6 +2350,7 @@ class DcpTestCase(ParametrizedTestCase):
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
+        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == 'value99'
@@ -2757,6 +2762,7 @@ class DcpTestCase(ParametrizedTestCase):
             assert rv == SUCCESS
             self.mcd_client.cas(key, 0, 0, cas, 'new-value', 0)
 
+        time.sleep(2)
         stream = self.dcp_client.stream_req(0, 0, 0, n, 0)
         responses = stream.run()
         mutations = \
