@@ -2708,7 +2708,7 @@ class DcpTestCase(ParametrizedTestCase):
             stats = self.mcd_client.stats('dcp')
             unacked = int(stats['eq_dcpq:flowctl:unacked_bytes'])
 
-            assert time.time() - start_t < 120,\
+            assert time.time() - start_t < 150,\
                 "timed out waiting for seqno on all vbuckets"
 
         stats = self.mcd_client.stats('dcp')
