@@ -2261,10 +2261,10 @@ class DcpTestCase(ParametrizedTestCase):
             self.mcd_client.append('key',str(i), 0, 0)
             val += str(i)
 
+        time.sleep(1)
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
-        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == val
@@ -2283,10 +2283,10 @@ class DcpTestCase(ParametrizedTestCase):
             self.mcd_client.prepend('key',str(i), 0, 0)
             val = str(i) + val
 
+        time.sleep(1)
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
-        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == val
