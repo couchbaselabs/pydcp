@@ -2304,10 +2304,10 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(100):
             self.mcd_client.incr('key', amt = 2, vbucket = 0)
 
+        time.sleep(1)
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
-        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == '200'
@@ -2326,10 +2326,10 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(100):
             self.mcd_client.decr('key', amt = 2, vbucket = 0)
 
+        time.sleep(1)
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
-        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == '0'
@@ -2347,10 +2347,10 @@ class DcpTestCase(ParametrizedTestCase):
         for i in range(100):
             self.mcd_client.replace('key', 0, 0, 'value'+str(i), 0)
 
+        time.sleep(1)
         stream = self.dcp_client.stream_req(0, 0, 0, 100, 0)
         assert stream.status == SUCCESS
 
-        time.sleep(2)
         responses = stream.run()
         assert stream.last_by_seqno == 101
         assert responses[1]['value'] == 'value99'
