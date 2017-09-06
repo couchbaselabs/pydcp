@@ -2175,6 +2175,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         for i in xrange(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+        time.sleep(2)
         self.statsHandler.wait_for_persistence(self.mcd_client)
 
         resp = self.mcd_client.stats('failovers')
@@ -2859,9 +2860,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         for i in range(doc_count):
             self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-
         self.statsHandler.wait_for_persistence(self.mcd_client)
-
         by_seqno_list = []
         mutation_count = []
 
@@ -2895,6 +2894,7 @@ class DcpTestCase(ParametrizedTestCase):
 
         proc1.start()
         proc2.start()
+        time.sleep(2)
         proc2.join()
         proc1.join()
 
