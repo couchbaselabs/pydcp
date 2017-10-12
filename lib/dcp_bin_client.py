@@ -347,7 +347,7 @@ class Open(Operation):
 class OpenConsumer(Open):
     """ Open consumer spec """
     def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_CONSUMER)
+        Open.__init__(self, name, FLAG_OPEN_CONSUMER, json='')
 
 class OpenProducer(Open):
     """ Open producer spec """
@@ -363,7 +363,7 @@ class OpenProducer(Open):
 class OpenNotifier(Open):
     """ Open notifier spec """
     def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_NOTIFIER)
+        Open.__init__(self, name, FLAG_OPEN_NOTIFIER, json='')
 
 class CloseStream(Operation):
     """ CloseStream spec """
