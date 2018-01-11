@@ -110,12 +110,15 @@ def add_stream(args):
     global dcp_client
     dcp_client = DcpClient(host, int(port),timeout=5,do_auth=False)
     print 'Connected to:',node
-    
+
     try:
         response = dcp_client.sasl_auth_plain(args.user, args.password)
     except MemcachedError as err:
         print err
         sys.exit(1)
+
+    dcp_client.bucket_select(bucket)
+
     print "Successfully AUTHed to ", bucket
     check_for_features(stream_xattrs,stream_collections)
     if stream_collections and filter_file != None:
