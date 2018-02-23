@@ -41,10 +41,11 @@ class DcpClient(MemcachedClient):
         op = OpenConsumer(name)
         return self._open(op)
 
-    def open_producer(self, name, xattr = False, collections = False, json = ''):
+    def open_producer(self, name, xattr = False, delete_times = False, collections = False, json = ''):
         """ opens an dcp producer connection """
         self.collections = collections
-        op = OpenProducer(name,xattr,collections,json)
+        self.delete_times = delete_times
+        op = OpenProducer(name,xattr,delete_times,collections,json)
         return self._open(op)
 
     def open_notifier(self, name):
@@ -125,7 +126,7 @@ class DcpClient(MemcachedClient):
              snap_end = end seqno of snapshot """
 
         op = StreamRequest(vbucket, takeover, start_seqno, end_seqno,
-                            vb_uuid, snap_start, snap_end,collections=self.collections)
+                            vb_uuid, snap_start, snap_end,delete_times=self.delete_times,collections=self.collections)
 
         response = self._handle_op(op)
 
@@ -352,12 +353,14 @@ class OpenConsumer(Open):
 class OpenProducer(Open):
     """ Open producer spec """
 
-    def __init__(self, name,xattr,collection, json):
+    def __init__(self, name,xattr,delete_times,collection, json):
         flags = FLAG_OPEN_PRODUCER
         if xattr:
             flags |= FLAG_OPEN_INCLUDE_XATTRS
         if collection:
-            flags |= FLAG_OPEN_COLLECTIONS    
+            flags |= FLAG_OPEN_COLLECTIONS
+        if delete_times:
+            flags |= FLAG_OPEN_INCLUDE_DELETE_TIMES
         Open.__init__(self, name, flags, json)
 
 class OpenNotifier(Open):
@@ -401,8 +404,8 @@ class StreamRequest(Operation):
     """ StreamRequest spec """
 
     def __init__(self, vbucket, takeover, start_seqno, end_seqno,
-                 vb_uuid, snap_start = None, snap_end = None, 
-                 collections = False):
+                 vb_uuid, snap_start = None, snap_end = None,
+                 collections = False, delete_times = False):
 
         if snap_start is None:
             snap_start = start_seqno
@@ -427,6 +430,7 @@ class StreamRequest(Operation):
         self.snap_start = snap_start
         self.snap_end = snap_end
         self.collection_filtering = collections
+        self.delete_times = delete_times
 
     def parse_extended_meta_data(self, extended_meta_data):
         # extended metadata is described here
@@ -466,14 +470,14 @@ class StreamRequest(Operation):
         pos = 0
         while pos < tot_len:
             xattr_len = struct.unpack('>I',value[pos:pos+4])[0]
-            pos = pos + 4               
+            pos = pos + 4
             xattr_key = ""
             xattr_value = ""
             # Extract the Key
             while value[pos] != '\000':
                 xattr_key = xattr_key + value[pos]
                 pos += 1
-            pos += 1 
+            pos += 1
             # Extract the Value
             while value[pos] != '\000':
                 xattr_value = xattr_value + value[pos]
@@ -556,9 +560,19 @@ class StreamRequest(Operation):
                          'collection_len' : clen}
 
         elif opcode == CMD_DELETION:
-            by_seqno, rev_seqno, ext_meta_len = \
+            delete_time = 0
+            ext_meta_len = 0
+            if self.collection_filtering or self.delete_times:
+                header_len = 21
+                by_seqno, rev_seqno, delete_time, clen = \
+                struct.unpack(">QQIB", body[0:21])
+            else:
+                header_len = 18
+                by_seqno, rev_seqno, ext_meta_len = \
                 struct.unpack(">QQH", body[0:18])
-            key = body[18:18+keylen]
+
+            print delete_time
+            key = body[header_len:header_len+keylen]
 
             if ext_meta_len > 0:
                 adjusted_time, conflict_resolution_mode = \
@@ -570,7 +584,9 @@ class StreamRequest(Operation):
                          'rev_seqno'  : rev_seqno,
                          'key'        : key,
                          'adjusted_time': adjusted_time,
-                        ' conflict_resolution_mode': conflict_resolution_mode}
+                         'conflict_resolution_mode': conflict_resolution_mode,
+                         'delete_time' : delete_time,
+                         'collection_len' : clen}
 
         elif opcode == CMD_SNAPSHOT_MARKER:
 
