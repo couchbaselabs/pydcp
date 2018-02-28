@@ -74,47 +74,49 @@ def handleMutation(response):
         print seqno, output_string
 
 
-def process_dcp_traffic(stream,args):
+def process_dcp_traffic(streams,args):
     complete = False
     key_count = 0
-
-    while not complete:
+    active_streams = len(streams)
+    while active_streams > 0:
         print "\rReceived " + str(key_count) + " keys" ,
         sys.stdout.flush()
-        if stream.has_response():
-            response = stream.next_response()
-            if response == None:
-                print "\nNo response / Stream complete"
-                complete = True
-            elif response['opcode'] == CMD_STREAM_REQ:
-                print "\nwasn't expecting a stream request"
-            elif response['opcode'] == CMD_MUTATION:
-                handleMutation(response)
-                key_count += 1
-            elif response['opcode'] == CMD_DELETION:
-                print response
-                #handleMutation(response)
-                key_count += 1
-            elif response['opcode'] == CMD_SNAPSHOT_MARKER:
-                print "\nReceived snapshot marker"
-            elif response['opcode'] == CMD_SYSTEM_EVENT:
-                handleSystemEvent(response)
-            elif response['opcode'] == CMD_STREAM_END:
-                print "\nReceived stream end. Going home."
-                complete = True
-            else:
-                print 'Unhandled opcode:',response['opcode']
-        else:
-            print '\nNo response'
-    print "closing stream"
+        for vb in streams:
+            stream = vb['stream']
+            if not vb['complete']:
+                if stream.has_response():
+                    response = stream.next_response()
+                    if response == None:
+                        print "\nNo response / Stream complete"
+                        vb['complete'] = True
+                        active_streams -= 1
+                    elif response['opcode'] == CMD_STREAM_REQ:
+                        print "\nwasn't expecting a stream request"
+                    elif response['opcode'] == CMD_MUTATION:
+                        handleMutation(response)
+                        key_count += 1
+                    elif response['opcode'] == CMD_DELETION:
+                        print response
+                        #handleMutation(response)
+                        key_count += 1
+                    elif response['opcode'] == CMD_SNAPSHOT_MARKER:
+                        print "\nReceived snapshot marker"
+                    elif response['opcode'] == CMD_SYSTEM_EVENT:
+                        handleSystemEvent(response)
+                    elif response['opcode'] == CMD_STREAM_END:
+                        print "\nReceived stream end. Stream complete."
+                        vb['complete'] = True
+                        active_streams -= 1
+                    else:
+                        print 'Unhandled opcode:',response['opcode']
+                else:
+                    print '\nNo response'
+    print "Closing connection"
     dcp_client.close()
 
-def add_stream(args):
+def initiate_connection(args):
     node = args.node
     bucket = args.bucket
-    vb_list = args.vbuckets
-    start_seq_no = args.start
-    end_seq_no = args.end
     stream_xattrs = args.xattrs
     include_delete_times = args.delete_times
     stream_collections = args.collections
@@ -163,17 +165,30 @@ def add_stream(args):
         assert response['status'] == SUCCESS
         print "Forcing compression on connection"
 
-    print 'Sending add stream request'
-    stream = dcp_client.stream_req(vbucket=int(vb_list[0]), takeover=0, \
-             start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=0)
-    handle_stream_create_response(stream)
-    return stream
+
+def add_streams(args):
+    vb_list = args.vbuckets
+    start_seq_no = args.start
+    end_seq_no = args.end
+    streams=[]  
+    print 'Sending add stream request(s)'
+    for vb in vb_list:
+        stream = dcp_client.stream_req(vbucket=int(vb), takeover=0, \
+                 start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=0)
+        handle_stream_create_response(stream)
+        vb_stream = { "id":         int(vb),
+                      "complete":   False,
+                      "keys_recvd": 0,
+                      "stream":     stream
+                    }
+        streams.append(vb_stream)
+    return streams
 
 def parseArguments():
   parser = argparse.ArgumentParser(description='Create a simple DCP Consumer')
   parser.add_argument('--node', '-n', default="localhost:11210", help='Cluster Node to connect to (host:port)')
   parser.add_argument('--bucket', '-b', default="default", help='Bucket to connect to')
-  parser.add_argument('--vbuckets', '-v',nargs='+',default=[1],  help='vbuckets to stream')
+  parser.add_argument('--vbuckets', '-v',nargs='+',default=[0],  help='vbuckets to stream')
   parser.add_argument('--start', '-s',default=0, type=int, help='start seq_num')
   parser.add_argument('--end', '-e',default=0xffffffffffffffff, type=int, help='end seq_num')
   parser.add_argument('--xattrs', '-x', help='Include Extended Attributes', default=False, action="store_true")
@@ -190,5 +205,6 @@ def parseArguments():
 
 if __name__ == "__main__":
     args = parseArguments()
-    stream = add_stream(args)
-    process_dcp_traffic(stream,args)
+    initiate_connection(args)
+    streams = add_streams(args)
+    process_dcp_traffic(streams,args)
