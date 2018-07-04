@@ -1,10 +1,10 @@
 
-This is the repo for upr stream testcases. See below for information on how to
+This is the repo for DCP stream testcases. See below for information on how to
 run the testsuite.
 
 Run all tests:
 
-./pyupr
+./pydcp
 
 Logging can be changed by specifying 'verbose' option:
 
@@ -17,7 +17,7 @@ Test suites can be specified with the 'suite' option:
 
 (None)   - Run all tests<br>
  -s all  - Run all tests<br>
- -s upr  - Run all upr related tests<br>
+ -s dcp  - Run all DCP related tests<br>
  -s mcd  - Run all memcached related tests<br>
 
 Some unit tests can only be run against certain server types. To specify your
