@@ -211,8 +211,8 @@ def parseArguments():
     parser.add_argument("--delete_times", help="Include delete times", default=False, required=False,
                         action="store_true")
     parser.add_argument("--compression", '-y', help="Compression", required=False, action='count', default=0)
-    parser.add_argument("--timeout", '-t', help="Set timeout length, -1 forces persistence", required=False, default=5)
-    parser.add_argument("--noop-interval", help="Set time in s between NOOP requests", required=False, default=120)
+    parser.add_argument("--timeout", '-t', help="Set timeout length in seconds, -1 disables timeout", required=False, default=5)
+    parser.add_argument("--noop-interval", help="Set time in seconds between NOOP requests", required=False, default=120)
     parser.add_argument("--opcode-dump", help="Dump all the received opcodes via print", required=False,
                         action="store_true")
     parser.add_argument("-u", "--user", help="User", required=True)
