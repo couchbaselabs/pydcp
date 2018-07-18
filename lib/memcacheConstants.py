@@ -50,6 +50,24 @@ CMD_DCP_ACK          = 0x5d
 CMD_CONTROL          = 0x5e
 CMD_SYSTEM_EVENT     = 0x5f
 
+# DCP opcode dictionary
+DCP_Opcode_Dictionary = {CMD_OPEN: 'CMD_OPEN',
+                         CMD_ADD_STREAM: 'CMD_ADD_STREAM',
+                         CMD_CLOSE_STREAM: 'CMD_CLOSE_STREAM',
+                         CMD_STREAM_REQ: 'CMD_STREAM_REQ',
+                         CMD_GET_FAILOVER_LOG: 'CMD_GET_FAILOVER_LOG',
+                         CMD_STREAM_END: 'CMD_STREAM_END',
+                         CMD_SNAPSHOT_MARKER: 'CMD_SNAPSHOT_MARKER',
+                         CMD_MUTATION: 'CMD_MUTATION',
+                         CMD_DELETION: 'CMD_DELETION',
+                         CMD_EXPIRATION: 'CMD_EXPIRATION',
+                         CMD_FLUSH: 'CMD_FLUSH',
+                         CMD_SET_VB_STATE: 'CMD_SET_VB_STATE',
+                         CMD_ACK: 'CMD_ACK',
+                         CMD_FLOW_CONTROL: 'CMD_FLOW_CONTROL',
+                         CMD_DCP_NOOP: 'CMD_DCP_NOOP',
+                         CMD_SYSTEM_EVENT: 'CMD_SYSTEM_EVENT'}
+
 # SASL stuff
 CMD_SASL_LIST_MECHS = 0x20
 CMD_SASL_AUTH = 0x21

@@ -195,8 +195,7 @@ class DcpClient(MemcachedClient):
                     self._recvMsg()
 
                 if self.__opcode_dump:
-                    out = str(hex(opcode))
-                    print 'Opcode Dump:', out, self.opcode_lookup(out)
+                    print 'Opcode Dump:', str(hex(opcode)), self.opcode_lookup(opcode)
 
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
@@ -253,23 +252,8 @@ class DcpClient(MemcachedClient):
         self.__opcode_dump = control
         
     def opcode_lookup(self, opcode):
-        opcode_dict = {'0x50': 'CMD_OPEN',
-                       '0x51': 'CMD_ADD_STREAM',
-                       '0x52': 'CMD_CLOSE_STREAM',
-                       '0x53': 'CMD_STREAM_REQ',
-                       '0x54': 'CMD_GET_FAILOVER_LOG',
-                       '0x55': 'CMD_STREAM_END',
-                       '0x56': 'CMD_SNAPSHOT_MARKER',
-                       '0x57': 'CMD_MUTATION',
-                       '0x58': 'CMD_DELETION',
-                       '0x59': 'CMD_EXPIRATION',
-                       '0x5a': 'CMD_FLUSH',
-                       '0x5b': 'CMD_SET_VB_STATE',
-                       '0x5d': 'CMD_ACK',
-                       '0x5e': 'CMD_FLOW_CONTROL',
-                       '0x5c': 'CMD_DCP_NOOP',
-                       '0x5f': 'CMD_SYSTEM_EVENT'}
-        return opcode_dict.get(opcode, 'Unknown Opcode')
+        from memcacheConstants import DCP_Opcode_Dictionary, CMD_DCP_NOOP
+        return DCP_Opcode_Dictionary.get(opcode, 'Unknown Opcode')
 
 
 class DcpStream(object):
