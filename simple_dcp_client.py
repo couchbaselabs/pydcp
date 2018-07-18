@@ -126,8 +126,11 @@ def initiate_connection(args):
     filter_file = args.filter
     filter_json = ''
     host, port = args.node.split(":")
+    timeout = int(args.timeout)
+    if timeout == -1:
+        timeout = 86400  # some very large number (one day)
     global dcp_client
-    dcp_client = DcpClient(host, int(port), timeout=5, do_auth=False)
+    dcp_client = DcpClient(host, int(port), timeout=timeout, do_auth=False)
     print 'Connected to:', node
 
     try:
@@ -200,6 +203,7 @@ def parseArguments():
     parser.add_argument("--delete_times", help="Include delete times", default=False, required=False,
                         action="store_true")
     parser.add_argument("--compression", '-y', help="Compression", required=False, action='count', default=0)
+    parser.add_argument("--timeout", '-t', help="Set timeout length, -1 forces persistence", required=False, default=5)
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     return parser.parse_args()
