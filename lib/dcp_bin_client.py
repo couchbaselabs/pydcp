@@ -214,6 +214,9 @@ class DcpClient(MemcachedClient):
                     # stream_req ops received during add_stream request
                     self.ack_stream_req(opaque)
 
+                elif opcode == CMD_DCP_NOOP:
+                    self.ack_dcp_noop_req(opaque)
+
             except Exception as ex:
                 print "recv_op Exception:", ex
                 if 'died' in str(ex):
@@ -230,6 +233,14 @@ class DcpClient(MemcachedClient):
                              0, 0, 0, 0,
                              len(body), opaque, 0)
         self.s.send(header + body)
+
+    def ack_dcp_noop_req(self, opaque):
+        # Added function to respond to NOOP's
+        header = struct.pack(RES_PKT_FMT,
+                             RES_MAGIC_BYTE,
+                             CMD_DCP_NOOP,
+                             0, 0, 0, 0, 0, opaque, 0)
+        self.s.sendall(header)
 
 
 class DcpStream(object):
