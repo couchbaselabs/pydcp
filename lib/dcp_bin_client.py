@@ -238,7 +238,7 @@ class DcpClient(MemcachedClient):
                              CMD_STREAM_REQ,
                              0, 0, 0, 0,
                              len(body), opaque, 0)
-        self.s.send(header + body)
+        self.s.sendall(header + body)
 
     def ack_dcp_noop_req(self, opaque):
         # Added function to respond to NOOP's
