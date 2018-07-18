@@ -129,6 +129,7 @@ def initiate_connection(args):
     timeout = int(args.timeout)
     if timeout == -1:
         timeout = 86400  # some very large number (one day)
+    noop_interval = str(args.noop_interval)
     global dcp_client
     dcp_client = DcpClient(host, int(port), timeout=timeout, do_auth=False)
     print 'Connected to:', node
@@ -162,6 +163,10 @@ def initiate_connection(args):
     response = dcp_client.general_control("enable_noop", "true")
     assert response['status'] == SUCCESS
     print "Enabled NOOP"
+
+    response2 = dcp_client.general_control("set_noop_interval", noop_interval)
+    assert response2['status'] == SUCCESS
+    print "NOOP interval set to ", noop_interval
 
     if force_compression:
         response = dcp_client.general_control("force_value_compression", "true")
@@ -204,6 +209,7 @@ def parseArguments():
                         action="store_true")
     parser.add_argument("--compression", '-y', help="Compression", required=False, action='count', default=0)
     parser.add_argument("--timeout", '-t', help="Set timeout length, -1 forces persistence", required=False, default=5)
+    parser.add_argument("--noop-interval", help="Set time in s between NOOP requests", required=False, default=120)
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     return parser.parse_args()
