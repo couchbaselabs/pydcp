@@ -252,7 +252,7 @@ class DcpClient(MemcachedClient):
         self.__opcode_dump = control
         
     def opcode_lookup(self, opcode):
-        from memcacheConstants import DCP_Opcode_Dictionary, CMD_DCP_NOOP
+        from memcacheConstants import DCP_Opcode_Dictionary
         return DCP_Opcode_Dictionary.get(opcode, 'Unknown Opcode')
 
 
