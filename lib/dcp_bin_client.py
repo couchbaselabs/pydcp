@@ -28,6 +28,9 @@ class DcpClient(MemcachedClient):
         # open_producer defines if collections are being streamed
         self.collections = False
 
+        # Option to print out opcodes received
+        self.__opcode_dump = False
+
     def _open(self, op):
         return self._handle_op(op)
 
@@ -191,6 +194,10 @@ class DcpClient(MemcachedClient):
                 opcode, status, opaque, cas, keylen, extlen, dtype, body = \
                     self._recvMsg()
 
+                if self.__opcode_dump:
+                    out = str(hex(opcode))
+                    print 'Opcode Dump:', out, self.opcode_lookup(out)
+
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
                                                     extlen, dtype, status,
@@ -241,6 +248,28 @@ class DcpClient(MemcachedClient):
                              CMD_DCP_NOOP,
                              0, 0, 0, 0, 0, opaque, 0)
         self.s.sendall(header)
+
+    def opcode_dump_control(self, control):
+        self.__opcode_dump = control
+        
+    def opcode_lookup(self, opcode):
+        opcode_dict = {'0x50': 'CMD_OPEN',
+                       '0x51': 'CMD_ADD_STREAM',
+                       '0x52': 'CMD_CLOSE_STREAM',
+                       '0x53': 'CMD_STREAM_REQ',
+                       '0x54': 'CMD_GET_FAILOVER_LOG',
+                       '0x55': 'CMD_STREAM_END',
+                       '0x56': 'CMD_SNAPSHOT_MARKER',
+                       '0x57': 'CMD_MUTATION',
+                       '0x58': 'CMD_DELETION',
+                       '0x59': 'CMD_EXPIRATION',
+                       '0x5a': 'CMD_FLUSH',
+                       '0x5b': 'CMD_SET_VB_STATE',
+                       '0x5d': 'CMD_ACK',
+                       '0x5e': 'CMD_FLOW_CONTROL',
+                       '0x5c': 'CMD_DCP_NOOP',
+                       '0x5f': 'CMD_SYSTEM_EVENT'}
+        return opcode_dict.get(opcode, 'Unknown Opcode')
 
 
 class DcpStream(object):

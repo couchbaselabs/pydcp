@@ -168,6 +168,9 @@ def initiate_connection(args):
     assert response2['status'] == SUCCESS
     print "NOOP interval set to ", noop_interval
 
+    if args.opcode_dump:
+        dcp_client.opcode_dump_control(True)
+
     if force_compression:
         response = dcp_client.general_control("force_value_compression", "true")
         assert response['status'] == SUCCESS
@@ -210,6 +213,8 @@ def parseArguments():
     parser.add_argument("--compression", '-y', help="Compression", required=False, action='count', default=0)
     parser.add_argument("--timeout", '-t', help="Set timeout length, -1 forces persistence", required=False, default=5)
     parser.add_argument("--noop-interval", help="Set time in s between NOOP requests", required=False, default=120)
+    parser.add_argument("--opcode-dump", help="Dump all the received opcodes via print", required=False,
+                        action="store_true")
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     return parser.parse_args()
