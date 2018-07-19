@@ -24,7 +24,7 @@ def check_for_features(xattrs=False, collections=False, compression=False):
         assert feature in resp
 
 
-def handle_stream_create_response(dcpStream):
+def handle_stream_create_response(dcpStream, args):
     if dcpStream.status == SUCCESS:
         print "Stream Opened Succesfully"
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
@@ -32,14 +32,15 @@ def handle_stream_create_response(dcpStream):
         vb_map = response['err_msg']
         sys.exit(1)
     elif dcpStream.status == ERR_ROLLBACK:
-        print "TODO: HANDLE ROLLBACK REQUEST"
-        sys.exit(1)
+        print "ROLLBACK REQUEST RECEIVED"
+        dcpStream = handle_rollback(dcpStream, args)
     elif dcpStream.status == ERR_NOT_SUPPORTED:
         print "Error: Stream Create Request Not Supported"
         sys.exit(1)
     else:
         print "Unhandled Stream Create Response", dcpStream.status
         sys.exit(1)
+    return dcpStream
 
 
 def handleSystemEvent(response):
@@ -187,7 +188,7 @@ def add_streams(args):
     for vb in vb_list:
         stream = dcp_client.stream_req(vbucket=int(vb), takeover=0, \
                                        start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=0)
-        handle_stream_create_response(stream)
+        handle_stream_create_response(stream, args)
         vb_stream = {"id": int(vb),
                      "complete": False,
                      "keys_recvd": 0,
@@ -195,6 +196,17 @@ def add_streams(args):
                      }
         streams.append(vb_stream)
     return streams
+
+
+def handle_rollback(dcpStream, args):
+    failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
+    server_last_seq_num = failover_fetch.get('value')[0][1]
+    server_vbucket_uuid = failover_fetch.get('value')[0][0]
+    
+    updated_dcpStream = dcp_client.stream_req(vbucket=dcpStream.vbucket, takeover=0,
+                                              start_seqno=server_last_seq_num, end_seqno=args.end,
+                                              vb_uuid=server_vbucket_uuid)
+    return updated_dcpStream
 
 
 def parseArguments():
