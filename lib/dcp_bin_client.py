@@ -29,7 +29,7 @@ class DcpClient(MemcachedClient):
         self.collections = False
 
         # Option to print out opcodes received
-        self.__opcode_dump = False
+        self._opcode_dump = False
 
     def _open(self, op):
         return self._handle_op(op)
@@ -178,7 +178,8 @@ class DcpClient(MemcachedClient):
 
     def send_op(self, op):
         """ sends op details to mcd client for lowlevel packet assembly """
-
+        if self._opcode_dump:
+            print 'Opcode Dump - Send:   ', str(hex(op.opcode)), self.opcode_lookup(op.opcode)
         self.vbucketId = op.vbucket
         self._sendCmd(op.opcode,
                       op.key,
@@ -194,8 +195,8 @@ class DcpClient(MemcachedClient):
                 opcode, status, opaque, cas, keylen, extlen, dtype, body = \
                     self._recvMsg()
 
-                if self.__opcode_dump:
-                    print 'Opcode Dump:', str(hex(opcode)), self.opcode_lookup(opcode)
+                if self._opcode_dump:
+                    print 'Opcode Dump - Recieve:', str(hex(opcode)), self.opcode_lookup(opcode)
 
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
@@ -249,7 +250,7 @@ class DcpClient(MemcachedClient):
         self.s.sendall(header)
 
     def opcode_dump_control(self, control):
-        self.__opcode_dump = control
+        self._opcode_dump = control
         
     def opcode_lookup(self, opcode):
         from memcacheConstants import DCP_Opcode_Dictionary
