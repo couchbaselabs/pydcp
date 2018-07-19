@@ -196,7 +196,7 @@ class DcpClient(MemcachedClient):
                     self._recvMsg()
 
                 if self._opcode_dump:
-                    print 'Opcode Dump - Recieve:', str(hex(opcode)), self.opcode_lookup(opcode)
+                    print 'Opcode Dump - Receive:', str(hex(opcode)), self.opcode_lookup(opcode)
 
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
@@ -239,7 +239,7 @@ class DcpClient(MemcachedClient):
                              CMD_STREAM_REQ,
                              0, 0, 0, 0,
                              len(body), opaque, 0)
-        self.s.sendall(header + body)
+        self.s.sendall(header + body)  # TODO: use a function of mc client instead of raw socket
 
     def ack_dcp_noop_req(self, opaque):
         # Added function to respond to NOOP's
@@ -247,7 +247,7 @@ class DcpClient(MemcachedClient):
                              RES_MAGIC_BYTE,
                              CMD_DCP_NOOP,
                              0, 0, 0, 0, 0, opaque, 0)
-        self.s.sendall(header)
+        self.s.sendall(header)  # TODO: use a function of mc client instead of raw socket
 
     def opcode_dump_control(self, control):
         self._opcode_dump = control

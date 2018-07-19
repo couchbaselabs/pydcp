@@ -75,8 +75,7 @@ def handleMutation(response):
         print seqno, output_string
 
 
-def process_dcp_traffic(streams, args):
-    complete = False
+def process_dcp_traffic(streams):
     key_count = 0
     active_streams = len(streams)
     while active_streams > 0:
@@ -112,8 +111,13 @@ def process_dcp_traffic(streams, args):
                         print 'Unhandled opcode:', response['opcode']
                 else:
                     print '\nNo response'
-    print "Closing connection"
-    dcp_client.close()
+            if vb['complete']:
+                # Need to close stream to vb - TODO: use a function of mc client instead of raw socket
+                header = struct.pack(RES_PKT_FMT,
+                                     REQ_MAGIC_BYTE,
+                                     CMD_CLOSE_STREAM,
+                                     0, 0, 0, vb['id'], 0, 0, 0)
+                dcp_client.s.sendall(header)
 
 
 def initiate_connection(args):
@@ -156,7 +160,6 @@ def initiate_connection(args):
                                         delete_times=include_delete_times,
                                         collections=stream_collections,
                                         json=filter_json)
-    print response
     assert response['status'] == SUCCESS
     print "Opened DCP consumer connection"
 
@@ -183,11 +186,12 @@ def add_streams(args):
     vb_list = args.vbuckets
     start_seq_no = args.start
     end_seq_no = args.end
+    vb_uuid = args.uuid
     streams = []
     print 'Sending add stream request(s)'
     for vb in vb_list:
-        stream = dcp_client.stream_req(vbucket=int(vb), takeover=0, \
-                                       start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=0)
+        stream = dcp_client.stream_req(vbucket=int(vb), takeover=0,
+                                       start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=vb_uuid)
         handle_stream_create_response(stream, args)
         vb_stream = {"id": int(vb),
                      "complete": False,
@@ -199,14 +203,26 @@ def add_streams(args):
 
 
 def handle_rollback(dcpStream, args):
+    updated_dcpStreams = []
+
     failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
-    server_last_seq_num = failover_fetch.get('value')[0][1]
-    server_vbucket_uuid = failover_fetch.get('value')[0][0]
-    
-    updated_dcpStream = dcp_client.stream_req(vbucket=dcpStream.vbucket, takeover=0,
-                                              start_seqno=server_last_seq_num, end_seqno=args.end,
-                                              vb_uuid=server_vbucket_uuid)
-    return updated_dcpStream
+    failover_values = failover_fetch.get('value')
+    rev_failover_values = failover_values[::-1]
+
+    for row in rev_failover_values:
+        server_last_seq_num = row[1]
+        server_vbucket_uuid = row[0]
+        args.start = server_last_seq_num
+        args.uuid = server_vbucket_uuid
+
+        print 'Retrying stream add with seq', server_last_seq_num, 'and uuid', server_vbucket_uuid
+        updated_dcpStreams.insert(0, add_streams(args))
+        # NOTE: This means continuous failbacks makes client side recursive.
+        process_dcp_traffic(updated_dcpStreams[0])
+        # instead ensures that process finishes before moving onto the next, specifically because
+        # two streams with the same vbucket cannot occur.
+
+    return updated_dcpStreams[0]
 
 
 def parseArguments():
@@ -229,6 +245,7 @@ def parseArguments():
     parser.add_argument("--noop-interval", help="Set time in seconds between NOOP requests", required=False)
     parser.add_argument("--opcode-dump", help="Dump all the received opcodes via print", required=False,
                         action="store_true")
+    parser.add_argument("--uuid", help="Set the vbucket UUID", type=int, default=0)
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     return parser.parse_args()
@@ -238,4 +255,6 @@ if __name__ == "__main__":
     args = parseArguments()
     initiate_connection(args)
     streams = add_streams(args)
-    process_dcp_traffic(streams, args)
+    process_dcp_traffic(streams)
+    print "Closing connection"
+    dcp_client.close()
