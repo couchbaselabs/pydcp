@@ -189,7 +189,11 @@ def add_streams(args):
     end_seq_no = args.end
     vb_uuid = args.uuid
     streams = []
+
     print 'Sending add stream request(s)'
+    if args.stream_req_info:
+        print 'Stream to vbucket(s)', vb_list, 'with seq no', start_seq_no, 'and uuid', vb_uuid
+
     for vb in vb_list:
         stream = dcp_client.stream_req(vbucket=int(vb), takeover=0,
                                        start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=vb_uuid)
@@ -246,6 +250,8 @@ def parseArguments():
     parser.add_argument("--noop-interval", help="Set time in seconds between NOOP requests", required=False)
     parser.add_argument("--opcode-dump", help="Dump all the received opcodes via print", required=False,
                         action="store_true")
+    parser.add_argument("--stream-req-info", help="Display vbuckets, seq no's and uuid with every stream request",
+                        required=False, action="store_true")
     parser.add_argument("--uuid", help="Set the vbucket UUID", type=int, default=0)
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
