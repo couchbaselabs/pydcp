@@ -210,9 +210,23 @@ def add_streams(args):
 def handle_rollback(dcpStream, args):
     updated_dcpStreams = []
 
-    failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
-    failover_values = failover_fetch.get('value')
-    rev_failover_values = failover_values[::-1]
+    if args.failover_log:
+        f_log = open(args.failover_log, 'r')
+        failover_values = []
+        for line in f_log:
+            line = line.replace('(', '')
+            line = line.replace(')', '')
+            split = line.split(',')
+            value = tuple([int(split[0]), int(split[1])])
+            failover_values.append(value)
+
+        rev_failover_values = sorted(failover_values, key=lambda x: x[1])
+        f_log.close()
+
+    else:
+        failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
+        failover_values = failover_fetch.get('value')
+        rev_failover_values = failover_values[::-1]
 
     for row in rev_failover_values:
         server_last_seq_num = row[1]
@@ -252,7 +266,10 @@ def parseArguments():
                         action="store_true")
     parser.add_argument("--stream-req-info", help="Display vbuckets, seq no's and uuid with every stream request",
                         required=False, action="store_true")
-    parser.add_argument("--uuid", help="Set the vbucket UUID", type=int, default=0)
+    parser.add_argument("--uuid", help="Set the vbucket UUID", type=int, default=0, required=False)
+    parser.add_argument("--failover-log", help= "Option to input a custom failover log via a file path, in the form of \
+    a list of tuples seperated by new lines: (uuid, seq.no) \n(uuid, seq.no)\n(uuid, seq.no)...",
+                        required=False, type=str)
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     return parser.parse_args()
