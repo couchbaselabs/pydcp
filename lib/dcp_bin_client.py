@@ -607,7 +607,7 @@ class StreamRequest(Operation):
                 by_seqno, rev_seqno, ext_meta_len = \
                     struct.unpack(">QQH", body[0:18])
 
-            print delete_time
+            # print delete_time
             key = body[header_len:header_len + keylen]
 
             if ext_meta_len > 0:

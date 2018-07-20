@@ -3,6 +3,8 @@
 import pprint
 import time
 import sys
+import logs
+import os
 from lib.dcp_bin_client import DcpClient
 from lib.mc_bin_client import MemcachedClient as McdClient
 from lib.mc_bin_client import MemcachedError
@@ -26,10 +28,13 @@ def check_for_features(xattrs=False, collections=False, compression=False):
 
 def handle_stream_create_response(dcpStream, args):
     if dcpStream.status == SUCCESS:
-        print "Stream Opened Succesfully"
+        if not args.stream_req_info:
+            print "Stream Opened Succesfully"
+        else:
+            print 'Stream Opened Successfully on vb', dcpStream.vbucket
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
         print "TODO: HANDLE NOT MY VBUCKET"
-        vb_map = response['err_msg']
+        print dcpStream.vbucket
         sys.exit(1)
     elif dcpStream.status == ERR_ROLLBACK:
         print "ROLLBACK REQUEST RECEIVED"
@@ -64,7 +69,7 @@ def handleMutation(response):
         if clen > 0:
             print 'KEY:{0} from collection: {1}'.format(response['key'], response['key'][:clen])
         else:
-            output_string = "KEY:" + response['key']
+            output_string += "KEY:" + response['key'] + ' vb ' + str(vb)
     if args.docs:
         output_string += "BODY:" + response['value']
     if args.xattrs:
@@ -95,10 +100,11 @@ def process_dcp_traffic(streams):
                         print "\nwasn't expecting a stream request"
                     elif response['opcode'] == CMD_MUTATION:
                         handleMutation(response)
+                        logs.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
                     elif response['opcode'] == CMD_DELETION:
-                        print response
-                        # handleMutation(response)
+                        handleMutation(response)  # Might be a bit broken
+                        logs.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
                     elif response['opcode'] == CMD_SNAPSHOT_MARKER:
                         print "\nReceived snapshot marker"
@@ -135,6 +141,7 @@ def initiate_connection(args):
     timeout = int(args.timeout)
     if timeout == -1:
         timeout = 86400  # some very large number (one day)
+
     global dcp_client
     dcp_client = DcpClient(host, int(port), timeout=timeout, do_auth=False)
     print 'Connected to:', node
@@ -142,7 +149,7 @@ def initiate_connection(args):
     try:
         response = dcp_client.sasl_auth_plain(args.user, args.password)
     except MemcachedError as err:
-        print err
+        print err, 'error'
         sys.exit(1)
 
     check_for_features(xattrs=stream_xattrs, collections=stream_collections, \
@@ -181,6 +188,15 @@ def initiate_connection(args):
         response = dcp_client.general_control("force_value_compression", "true")
         assert response['status'] == SUCCESS
         print "Forcing compression on connection"
+
+    reset_list = []
+    if args.log_reset:
+        reset_list = args.vbuckets
+    else:
+        for vb in args.vbuckets:
+            if not os.path.exists(logs.get_path(vb)):
+                reset_list.append(vb)
+    logs.reset(reset_list)
 
 
 def add_streams(args):
@@ -270,6 +286,8 @@ def parseArguments():
     parser.add_argument("--failover-log", help= "Option to input a custom failover log via a file path, in the form of \
     a list of tuples seperated by new lines: (uuid, seq.no) \n(uuid, seq.no)\n(uuid, seq.no)...",
                         required=False, type=str)
+    parser.add_argument("--log-reset", "-l", help="Disable initial reset of log files", required=False,
+                        action="store_false")
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     return parser.parse_args()
