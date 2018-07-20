@@ -31,6 +31,9 @@ class DcpClient(MemcachedClient):
         # Option to print out opcodes received
         self._opcode_dump = False
 
+        # Rollback request number received from server
+        self.rollback_request_no = 0
+
     def _open(self, op):
         return self._handle_op(op)
 
@@ -202,6 +205,11 @@ class DcpClient(MemcachedClient):
                     response = op.formated_response(opcode, keylen,
                                                     extlen, dtype, status,
                                                     cas, body, opaque)
+
+                    if opcode == CMD_STREAM_REQ and status == ERR_ROLLBACK:
+                        # Server requests rollback to sequence number due to bad (uuid/seq_no) request
+                        self.rollback_request_no = int(body.encode('hex'))
+
                     return response
 
                 # check if response is for different request
@@ -255,6 +263,9 @@ class DcpClient(MemcachedClient):
     def opcode_lookup(self, opcode):
         from memcacheConstants import DCP_Opcode_Dictionary
         return DCP_Opcode_Dictionary.get(opcode, 'Unknown Opcode')
+
+    def get_rollback_request_no(self):
+        return self.rollback_request_no
 
 
 class DcpStream(object):

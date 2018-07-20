@@ -33,6 +33,7 @@ def handle_stream_create_response(dcpStream, args):
         sys.exit(1)
     elif dcpStream.status == ERR_ROLLBACK:
         print "ROLLBACK REQUEST RECEIVED"
+        print "Server requests Rollback to sequence number:", DcpClient.get_rollback_request_no(dcp_client)
         dcpStream = handle_rollback(dcpStream, args)
     elif dcpStream.status == ERR_NOT_SUPPORTED:
         print "Error: Stream Create Request Not Supported"
