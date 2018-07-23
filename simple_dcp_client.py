@@ -139,8 +139,6 @@ def initiate_connection(args):
     filter_json = ''
     host, port = args.node.split(":")
     timeout = int(args.timeout)
-    if timeout == -1:
-        timeout = 86400  # some very large number (one day)
 
     global dcp_client
     dcp_client = DcpClient(host, int(port), timeout=timeout, do_auth=False)
@@ -293,8 +291,23 @@ def parseArguments():
     return parser.parse_args()
 
 
+def argument_exceptions(args):
+    if args.vbuckets == ['-1']:
+        int_to_string = []
+        for i in range(0,1024):
+            if i not in range(170, 256):
+                int_to_string.append(str(i))
+        args.vbuckets = int_to_string
+
+    if args.timeout == -1:
+        args.timeout = 86400  # some very large number (one day)
+
+    return args
+
+
 if __name__ == "__main__":
     args = parseArguments()
+    args = argument_exceptions(args)
     initiate_connection(args)
     streams = add_streams(args)
     process_dcp_traffic(streams)
