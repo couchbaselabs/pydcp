@@ -3,8 +3,8 @@
 import pprint
 import time
 import sys
-import dcp_data_persist
 import os
+from dcp_data_persist import LogData
 from lib.dcp_bin_client import DcpClient
 from lib.mc_bin_client import MemcachedClient as McdClient
 from lib.mc_bin_client import MemcachedError
@@ -34,7 +34,7 @@ def handle_stream_create_response(dcpStream, args):
             print 'Stream Opened Successfully on vb', dcpStream.vbucket
 
         if args.failover_logging:
-            dcp_data_persist.upsert_failover(dcpStream.vbucket, dcpStream.failover_log)
+            dcp_log_data.upsert_failover(dcpStream.vbucket, dcpStream.failover_log)
 
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
         print "NOT MY VBUCKET -", dcpStream.vbucket, 'does not live on this node'
@@ -108,12 +108,12 @@ def process_dcp_traffic(streams, args):
                     elif response['opcode'] == CMD_MUTATION:
                         handleMutation(response)
                         if args.failover_logging:
-                            dcp_data_persist.upsert_sequence_no(response['vbucket'], response['by_seqno'])
+                            dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
                     elif response['opcode'] == CMD_DELETION:
                         handleMutation(response)  # Printing untested with deletion, based on mutation
                         if args.failover_logging:
-                            dcp_data_persist.upsert_sequence_no(response['vbucket'], response['by_seqno'])
+                            dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
                     elif response['opcode'] == CMD_SNAPSHOT_MARKER:
                         print "\nReceived snapshot marker"
@@ -165,11 +165,15 @@ def initiate_connection(args):
     dcp_client.bucket_select(bucket)
     print "Successfully AUTHed to ", bucket
 
+    global dcp_log_data
+    if args.log_path:
+        args.log_path = os.path.normpath(args.log_path)
+    dcp_log_data = LogData(args.log_path)
+
     if stream_collections and filter_file != None:
         filter_file = open(args.filter, "r")
         filter_json = filter_file.read()
         print "DCP Open filter: {}".format(filter_json)
-
     response = dcp_client.open_producer("python stream",
                                         xattr=stream_xattrs,
                                         delete_times=include_delete_times,
@@ -197,14 +201,14 @@ def initiate_connection(args):
         print "Forcing compression on connection"
 
     if args.failover_logging:
-        reset_list = []
-        if args.log_reset:
+        if not dcp_log_data.internal and args.log_preset:
+            reset_list = []
             for vb in args.vbuckets:
-                if not os.path.exists(dcp_data_persist.get_path(vb)):
+                if not os.path.exists(dcp_log_data.get_path(vb)):
                     reset_list.append(vb)
         else:
             reset_list = args.vbuckets
-        dcp_data_persist.reset(reset_list)
+        dcp_log_data.reset(reset_list)
 
 
 def add_streams(args):
@@ -236,12 +240,14 @@ def handle_rollback(dcpStream, args):
 
     # If argument to use JSON log files
     if args.failover_logging:
-        log_fetch = dcp_data_persist.get_failover_logs([dcpStream.vbucket])
+        log_fetch = dcp_log_data.get_failover_logs([dcpStream.vbucket])
         if log_fetch != {}:  # If the failover log is not empty, use it
             data = log_fetch[str(dcpStream.vbucket)]
             rev_failover_values = sorted(data, key=lambda x: x[1])
-        else:  # Default to using uuid 0, seq no 0
-            rev_failover_values = [(0,0)]
+        else:
+            failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
+            failover_values = failover_fetch.get('value')
+            rev_failover_values = failover_values[::-1]
 
     # Otherwise get failover log from server
     else:
@@ -290,11 +296,15 @@ def parseArguments():
     parser.add_argument("--uuid", help="Set the vbucket UUID", type=int, default=0, required=False)
     parser.add_argument("--failover-logging", help="Enables use of persisted log JSON files for each vbucket, which \
     contain the failover log and sequence number", required=False, action='store_true')
-    parser.add_argument("--log-reset", "-l", help="Enable initial reset of log files", required=False,
+    parser.add_argument("--log-path", help="Set the file path to use for the log files", default=None, required=False)
+    parser.add_argument("--log-preset", "-l", help="Enable initial preset of log files", required=False,
                         action="store_true")
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
-    return parser.parse_args()
+    parsed_args = parser.parse_args()
+    if (parsed_args.log_path or parsed_args.log_preset) and not parsed_args.failover_logging:
+        parser.error("Both --log-path and --log-preset require --failover-logging to function.")
+    return parsed_args
 
 
 def convert_special_argument_parameters(args):
