@@ -3,6 +3,8 @@
 import pprint
 import time
 import sys
+import dcp_data_persist
+import os
 from lib.dcp_bin_client import DcpClient
 from lib.mc_bin_client import MemcachedClient as McdClient
 from lib.mc_bin_client import MemcachedError
@@ -30,19 +32,27 @@ def handle_stream_create_response(dcpStream, args):
             print "Stream Opened Succesfully"
         else:
             print 'Stream Opened Successfully on vb', dcpStream.vbucket
+
+        if args.failover_logging:
+            dcp_data_persist.upsert_failover(dcpStream.vbucket, dcpStream.failover_log)
+
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
         print "NOT MY VBUCKET -", dcpStream.vbucket, 'does not live on this node'
         # TODO: Handle that vbucket not entering the stream list
         sys.exit(1)
+
     elif dcpStream.status == ERR_ROLLBACK:
         print "Server requests Rollback to sequence number:", dcpStream.rollback_seqno
         dcpStream = handle_rollback(dcpStream, args)
+
     elif dcpStream.status == ERR_NOT_SUPPORTED:
         print "Error: Stream Create Request Not Supported"
         sys.exit(1)
+
     else:
         print "Unhandled Stream Create Response", dcpStream.status
         sys.exit(1)
+
     return dcpStream
 
 
@@ -78,7 +88,7 @@ def handleMutation(response):
         print seqno, output_string
 
 
-def process_dcp_traffic(streams):
+def process_dcp_traffic(streams, args):
     key_count = 0
     active_streams = len(streams)
     while active_streams > 0:
@@ -97,9 +107,13 @@ def process_dcp_traffic(streams):
                         print "\nwasn't expecting a stream request"
                     elif response['opcode'] == CMD_MUTATION:
                         handleMutation(response)
+                        if args.failover_logging:
+                            dcp_data_persist.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
                     elif response['opcode'] == CMD_DELETION:
                         handleMutation(response)  # Printing untested with deletion, based on mutation
+                        if args.failover_logging:
+                            dcp_data_persist.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
                     elif response['opcode'] == CMD_SNAPSHOT_MARKER:
                         print "\nReceived snapshot marker"
@@ -182,6 +196,16 @@ def initiate_connection(args):
         assert response['status'] == SUCCESS
         print "Forcing compression on connection"
 
+    if args.failover_logging:
+        reset_list = []
+        if args.log_reset:
+            for vb in args.vbuckets:
+                if not os.path.exists(dcp_data_persist.get_path(vb)):
+                    reset_list.append(vb)
+        else:
+            reset_list = args.vbuckets
+        dcp_data_persist.reset(reset_list)
+
 
 def add_streams(args):
     vb_list = args.vbuckets
@@ -210,19 +234,14 @@ def add_streams(args):
 def handle_rollback(dcpStream, args):
     updated_dcpStreams = []
 
-    # If argument to use manual log
-    if args.failover_log:
-        f_log = open(args.failover_log, 'r')
-        failover_values = []
-        for line in f_log:
-            line = line.replace('(', '')
-            line = line.replace(')', '')
-            split = line.split(',')
-            value = tuple([int(split[0]), int(split[1])])
-            failover_values.append(value)
-
-        rev_failover_values = sorted(failover_values, key=lambda x: x[1])
-        f_log.close()
+    # If argument to use JSON log files
+    if args.failover_logging:
+        log_fetch = dcp_data_persist.get_failover_logs([dcpStream.vbucket])
+        if log_fetch != {}:  # If the failover log is not empty, use it
+            data = log_fetch[str(dcpStream.vbucket)]
+            rev_failover_values = sorted(data, key=lambda x: x[1])
+        else:  # Default to using uuid 0, seq no 0
+            rev_failover_values = [(0,0)]
 
     # Otherwise get failover log from server
     else:
@@ -239,7 +258,7 @@ def handle_rollback(dcpStream, args):
         print 'Retrying stream add with seq', server_last_seq_num, 'and uuid', server_vbucket_uuid
         updated_dcpStreams.insert(0, add_streams(args))
         # NOTE: This means continuous failbacks makes client side recursive.
-        process_dcp_traffic(updated_dcpStreams[0])
+        process_dcp_traffic(updated_dcpStreams[0], args)
         # instead ensures that process finishes before moving onto the next, specifically because
         # two streams with the same vbucket cannot occur.
 
@@ -269,9 +288,10 @@ def parseArguments():
     parser.add_argument("--stream-req-info", help="Display vbuckets, seq no's and uuid with every stream request",
                         required=False, action="store_true")
     parser.add_argument("--uuid", help="Set the vbucket UUID", type=int, default=0, required=False)
-    parser.add_argument("--failover-log", help= "Option to input a custom failover log via a file path, in the form of \
-    a list of tuples seperated by new lines: (uuid, seq.no) \n(uuid, seq.no)\n(uuid, seq.no)...",
-                        required=False, type=str)
+    parser.add_argument("--failover-logging", help="Enables use of persisted log JSON files for each vbucket, which \
+    contain the failover log and sequence number", required=False, action='store_true')
+    parser.add_argument("--log-reset", "-l", help="Enable initial reset of log files", required=False,
+                        action="store_true")
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     return parser.parse_args()
@@ -296,6 +316,6 @@ if __name__ == "__main__":
     args = convert_special_argument_parameters(args)
     initiate_connection(args)
     streams = add_streams(args)
-    process_dcp_traffic(streams)
+    process_dcp_traffic(streams, args)
     print "Closing connection"
     dcp_client.close()
