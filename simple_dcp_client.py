@@ -32,13 +32,14 @@ def handle_stream_create_response(dcpStream, args):
             print "Stream Opened Succesfully"
         else:
             print 'Stream Opened Successfully on vb', dcpStream.vbucket
+        logs.upsert_failover(dcpStream.vbucket, dcpStream.failover_log)
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
-        print "TODO: HANDLE NOT MY VBUCKET"
-        print dcpStream.vbucket
+        print "NOT MY VBUCKET -", dcpStream.vbucket, 'does not live on this node'
+        # TODO: Handle that vbucket not entering the stream list
         sys.exit(1)
     elif dcpStream.status == ERR_ROLLBACK:
         print "ROLLBACK REQUEST RECEIVED"
-        print "Server requests Rollback to sequence number:", DcpClient.get_rollback_request_no(dcp_client)
+        print "Server requests Rollback to sequence number:", dcpStream.rollback_seqno
         dcpStream = handle_rollback(dcpStream, args)
     elif dcpStream.status == ERR_NOT_SUPPORTED:
         print "Error: Stream Create Request Not Supported"
@@ -223,7 +224,9 @@ def add_streams(args):
 
 def handle_rollback(dcpStream, args):
     updated_dcpStreams = []
+    log_fetch = logs.get_failover_logs([dcpStream.vbucket])
 
+    # If argument to use manual log
     if args.failover_log:
         f_log = open(args.failover_log, 'r')
         failover_values = []
@@ -237,6 +240,12 @@ def handle_rollback(dcpStream, args):
         rev_failover_values = sorted(failover_values, key=lambda x: x[1])
         f_log.close()
 
+    # If a failover log is persisted, then use that
+    elif log_fetch != {}:
+        data = log_fetch[str(dcpStream.vbucket)]
+        rev_failover_values = sorted(data, key=lambda x: x[1])
+
+    # Otherwise get failover log from server
     else:
         failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
         failover_values = failover_fetch.get('value')
