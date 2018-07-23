@@ -28,8 +28,8 @@ def handle_stream_create_response(dcpStream):
     if dcpStream.status == SUCCESS:
         print "Stream Opened Succesfully"
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
-        print "TODO: HANDLE NOT MY VBUCKET"
-        vb_map = response['err_msg']
+        print "NOT MY VBUCKET -", dcpStream.vbucket, 'does not live on this node'
+        # TODO: Handle that vbucket not entering the stream list
         sys.exit(1)
     elif dcpStream.status == ERR_ROLLBACK:
         print "TODO: HANDLE ROLLBACK REQUEST"
@@ -62,7 +62,7 @@ def handleMutation(response):
         if clen > 0:
             print 'KEY:{0} from collection: {1}'.format(response['key'], response['key'][:clen])
         else:
-            output_string = "KEY:" + response['key']
+            output_string += "KEY:" + response['key'] + ' vb ' + str(vb)
     if args.docs:
         output_string += "BODY:" + response['value']
     if args.xattrs:
@@ -136,7 +136,7 @@ def initiate_connection(args):
     try:
         response = dcp_client.sasl_auth_plain(args.user, args.password)
     except MemcachedError as err:
-        print err
+        print 'ERROR:', err
         sys.exit(1)
 
     check_for_features(xattrs=stream_xattrs, collections=stream_collections, \
@@ -155,7 +155,6 @@ def initiate_connection(args):
                                         delete_times=include_delete_times,
                                         collections=stream_collections,
                                         json=filter_json)
-    print response
     assert response['status'] == SUCCESS
     print "Opened DCP consumer connection"
 
@@ -183,6 +182,7 @@ def add_streams(args):
     start_seq_no = args.start
     end_seq_no = args.end
     streams = []
+
     print 'Sending add stream request(s)'
     for vb in vb_list:
         stream = dcp_client.stream_req(vbucket=int(vb), takeover=0, \
