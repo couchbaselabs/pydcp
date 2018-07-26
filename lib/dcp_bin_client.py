@@ -29,7 +29,7 @@ class DcpClient(MemcachedClient):
         self.collections = False
 
         # Option to print out opcodes received
-        self.__opcode_dump = False
+        self._opcode_dump = False
 
     def _open(self, op):
         return self._handle_op(op)
@@ -178,7 +178,8 @@ class DcpClient(MemcachedClient):
 
     def send_op(self, op):
         """ sends op details to mcd client for lowlevel packet assembly """
-
+        if self._opcode_dump:
+            print 'Opcode Dump - Send:   ', str(hex(op.opcode)), self.opcode_lookup(op.opcode)
         self.vbucketId = op.vbucket
         self._sendCmd(op.opcode,
                       op.key,
@@ -194,8 +195,8 @@ class DcpClient(MemcachedClient):
                 opcode, status, opaque, cas, keylen, extlen, dtype, body = \
                     self._recvMsg()
 
-                if self.__opcode_dump:
-                    print 'Opcode Dump:', str(hex(opcode)), self.opcode_lookup(opcode)
+                if self._opcode_dump:
+                    print 'Opcode Dump - Receive:', str(hex(opcode)), self.opcode_lookup(opcode)
 
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
@@ -238,7 +239,7 @@ class DcpClient(MemcachedClient):
                              CMD_STREAM_REQ,
                              0, 0, 0, 0,
                              len(body), opaque, 0)
-        self.s.send(header + body)
+        self.s.sendall(header + body)  # TODO: use a function of mc client instead of raw socket
 
     def ack_dcp_noop_req(self, opaque):
         # Added function to respond to NOOP's
@@ -246,10 +247,10 @@ class DcpClient(MemcachedClient):
                              RES_MAGIC_BYTE,
                              CMD_DCP_NOOP,
                              0, 0, 0, 0, 0, opaque, 0)
-        self.s.sendall(header)
+        self.s.sendall(header)  # TODO: use a function of mc client instead of raw socket
 
     def opcode_dump_control(self, control):
-        self.__opcode_dump = control
+        self._opcode_dump = control
         
     def opcode_lookup(self, opcode):
         from memcacheConstants import DCP_Opcode_Dictionary
@@ -595,7 +596,6 @@ class StreamRequest(Operation):
                 by_seqno, rev_seqno, ext_meta_len = \
                     struct.unpack(">QQH", body[0:18])
 
-            print delete_time
             key = body[header_len:header_len + keylen]
 
             if ext_meta_len > 0:
