@@ -14,21 +14,23 @@ class LogData(object):
 
     def __init__(self, dirpath):
         if dirpath is not None:
-            """ Create with external file logging """
-            self.internal = False
+            # Create with external file logging
+            self.external = True
             self.path = os.path.join(dirpath, os.path.normpath('logs/'))
         else:
-            """ Create with internal file logging """
-            self.internal = True
-            self.dictstore = {}
+            self.external = False
+        self.dictstore = {}
+
+    def setup_log_preset(self, vb_list):
+        """ Used when --keep-logs is triggered, to move external data to dictstore """
+        external_data = self.get_all_external(vb_list)
+        for key in external_data.keys():
+            self.dictstore[str(key)] = external_data[key]
 
     def get_path(self, vb):
         """ Retrieves path to log file for inputted virtual bucket number """
         # Make directory if it doesn't exist
-        if self.internal:
-            raise RuntimeError('LogData specified as internal, no external path')
-
-        else:
+        if self.external:
             fullpath = os.path.join(self.path, os.path.normpath('{}.json'.format(vb)))
             dirname = os.path.dirname(fullpath)
             if dirname and not os.path.exists(dirname):
@@ -40,26 +42,26 @@ class LogData(object):
 
             return fullpath
 
+        else:
+            raise RuntimeError('LogData specified as internal, no external path')
+
     def reset(self, vb_list):
         """ Clears/makes files for list of virtual bucket numbers"""
-        if self.internal:
-            self.dictstore = {}
-        else:
+        self.dictstore = {}
+        if self.external:
             for vb in vb_list:
                 path_string = self.get_path(vb)
-                print path_string
                 with open(path_string, 'w') as f:
                     json.dump({}, f)
 
     def upsert_failover(self, vb, failover_log):
         """ Insert / update failover log """
-        if self.internal:
-            if str(vb) in self.dictstore.keys():
-                self.dictstore[str(vb)]['failover_log'] = failover_log
-            else:
-                self.dictstore[str(vb)] = {'failover_log': failover_log}
-
+        if str(vb) in self.dictstore.keys():
+            self.dictstore[str(vb)]['failover_log'] = failover_log
         else:
+            self.dictstore[str(vb)] = {'failover_log': failover_log}
+
+        if self.external:
             path_string = self.get_path(vb)
 
             with open(path_string, 'r') as vb_log:
@@ -72,92 +74,69 @@ class LogData(object):
 
     def upsert_sequence_no(self, vb, seq_no):
         """ Insert / update sequence number, and move old sequence number to appropriate list """
-        if self.internal:
-            if str(vb) in self.dictstore.keys():
-                if 'seq_no' in self.dictstore[str(vb)].keys():
-                    if 'old_seq_no' in self.dictstore[str(vb)].keys():
-                        old_seq_no = self.dictstore[str(vb)]['old_seq_no']
-                    else:
-                        old_seq_no = []
-                    old_seq_no.append(self.dictstore[str(vb)]['seq_no'])
-                    self.dictstore[str(vb)]['old_seq_no'] = old_seq_no
-                    self.dictstore[str(vb)]['seq_no'] = seq_no
-            else:
-                self.dictstore[str(vb)] = {'seq_no': seq_no}
+        if str(vb) in self.dictstore.keys():
+            if 'seq_no' in self.dictstore[str(vb)].keys():
+                if 'old_seq_no' in self.dictstore[str(vb)].keys():
+                    old_seq_no = self.dictstore[str(vb)]['old_seq_no']
+                else:
+                    old_seq_no = []
+                old_seq_no.append(self.dictstore[str(vb)]['seq_no'])
+                self.dictstore[str(vb)]['old_seq_no'] = old_seq_no
+            self.dictstore[str(vb)]['seq_no'] = seq_no
         else:
+            self.dictstore[str(vb)] = {'seq_no': seq_no}
+
+    def push_sequence_no(self, vb):
+        """ Push sequence number and old sequence number to external JSON files """
+        if self.external:
             path_string = self.get_path(vb)
 
             with open(path_string, 'r') as vb_log:
                 data = json.load(vb_log)
 
-            if 'old_seq_no' in data.keys():
-                old_seq_no = data['old_seq_no']
-            else:
-                old_seq_no = []
+            data['old_seq_no'] = self.dictstore[str(vb)]['old_seq_no']
 
-            if 'seq_no' in data.keys():
-                old_seq_no.append(data['seq_no'])
-            data['old_seq_no'] = old_seq_no
-            data['seq_no'] = seq_no
+            data['seq_no'] = self.dictstore[str(vb)]['seq_no']
 
             with open(path_string, 'w') as vb_log:
                 json.dump(data, vb_log)
 
-    def read_all(self, vb_list):
+    def get_all(self, vb_list):
         """ Return a dictionary where keys are vbuckets and the data is the total JSON for that vbucket """
         read_dict = {}
-
-        if self.internal:
-            for vb in vb_list:
-                if str(vb) in self.dictstore.keys():
-                    read_dict[str(vb)] = self.dictstore[str(vb)]
-
-        else:
-            for vb in vb_list:
-                path_string = self.get_path(vb)
-                with open(path_string, 'r') as vb_log:
-                    data = json.load(vb_log)
-                read_dict[str(vb)] = data
+        for vb in vb_list:
+            if str(vb) in self.dictstore.keys():
+                read_dict[str(vb)] = self.dictstore[str(vb)]
 
         return read_dict
+
+    def get_all_external(self, vb_list):
+        read_dict = {}
+        if self.external:
+            for vb in vb_list:
+                path_string = self.get_path(vb)
+                if os.path.exists(path_string):
+                    with open(path_string, 'r') as vb_log:
+                        data = json.load(vb_log)
+                    read_dict[str(vb)] = data
+            return read_dict
+        else:
+            raise IOError("No external files setup")
 
     def get_seq_nos(self, vb_list):
         """ Return a dictionary where keys are vbuckets and the data is the sequence number """
         read_dict = {}
-
-        if self.internal:
-            for vb in vb_list:
-                if str(vb) in self.dictstore:
-                    read_dict[str(vb)] = self.dictstore[str(vb)].get('seq_no')
-        else:
-            for vb in vb_list:
-                path_string = self.get_path(vb)
-                with open(path_string, 'r') as vb_log:
-                    data = json.load(vb_log)
-                try:
-                    read_dict[str(vb)] = data['seq_no']
-                except KeyError:
-                    print "Seq no currently missing in log file for vbucket", str(vb)
-                    continue
+        for vb in vb_list:
+            if str(vb) in self.dictstore:
+                read_dict[str(vb)] = self.dictstore[str(vb)].get('seq_no')
 
         return read_dict
 
     def get_failover_logs(self, vb_list):
         """ Return a dictionary where keys are vbuckets and the data is the failover log list """
         read_dict = {}
-        if self.internal:
-            for vb in vb_list:
-                if str(vb) in self.dictstore:
-                    read_dict[str(vb)] = self.dictstore[str(vb)].get('failover_log')
-        else:
-            for vb in vb_list:
-                path_string = self.get_path(vb)
-                with open(path_string, 'r') as vb_log:
-                    data = json.load(vb_log)
-                try:
-                    read_dict[str(vb)] = data['failover_log']
-                except KeyError:
-                    print "Failover log currently missing in log file for vbucket", str(vb)
-                    continue
+        for vb in vb_list:
+            if str(vb) in self.dictstore:
+                read_dict[str(vb)] = self.dictstore[str(vb)].get('failover_log')
 
         return read_dict

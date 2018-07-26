@@ -33,7 +33,7 @@ def handle_stream_create_response(dcpStream, args):
         else:
             print 'Stream Opened Successfully on vb', dcpStream.vbucket
 
-        if args.failover_logging:
+        if args.failover_logging and not args.keep_logs:  # keep_logs implies that there is a set of JSON log files
             dcp_log_data.upsert_failover(dcpStream.vbucket, dcpStream.failover_log)
 
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
@@ -100,9 +100,10 @@ def process_dcp_traffic(streams, args):
                 if stream.has_response():
                     response = stream.next_response()
                     if response == None:
-                        print "\nNo response / Stream complete"
+                        print "\nNo response from vbucket", vb['id']
                         vb['complete'] = True
                         active_streams -= 1
+                        dcp_log_data.push_sequence_no(vb['id'])
                     elif response['opcode'] == CMD_STREAM_REQ:
                         print "\nwasn't expecting a stream request"
                     elif response['opcode'] == CMD_MUTATION:
@@ -123,6 +124,7 @@ def process_dcp_traffic(streams, args):
                         print "\nReceived stream end. Stream complete."
                         vb['complete'] = True
                         active_streams -= 1
+                        dcp_log_data.push_sequence_no(response['vbucket'])
                     else:
                         print 'Unhandled opcode:', response['opcode']
                 else:
@@ -201,11 +203,15 @@ def initiate_connection(args):
         print "Forcing compression on connection"
 
     if args.failover_logging:
-        if not dcp_log_data.internal and args.log_preset:
+        if dcp_log_data.external and args.keep_logs:
             reset_list = []
+            preset_list = []
             for vb in args.vbuckets:
-                if not os.path.exists(dcp_log_data.get_path(vb)):
+                if os.path.exists(dcp_log_data.get_path(vb)):
+                    preset_list.append(vb)
+                else:
                     reset_list.append(vb)
+            dcp_log_data.setup_log_preset(preset_list)
         else:
             reset_list = args.vbuckets
         dcp_log_data.reset(reset_list)
@@ -241,7 +247,7 @@ def handle_rollback(dcpStream, args):
     # If argument to use JSON log files
     if args.failover_logging:
         log_fetch = dcp_log_data.get_failover_logs([dcpStream.vbucket])
-        if log_fetch != {}:  # If the failover log is not empty, use it
+        if log_fetch.get(str(dcpStream.vbucket), None) is not None:  # If the failover log is not empty, use it
             data = log_fetch[str(dcpStream.vbucket)]
             rev_failover_values = sorted(data, key=lambda x: x[1])
         else:
@@ -297,13 +303,15 @@ def parseArguments():
     parser.add_argument("--failover-logging", help="Enables use of persisted log JSON files for each vbucket, which \
     contain the failover log and sequence number", required=False, action='store_true')
     parser.add_argument("--log-path", help="Set the file path to use for the log files", default=None, required=False)
-    parser.add_argument("--log-preset", "-l", help="Enable initial preset of log files", required=False,
+    parser.add_argument("--keep-logs", "-l", help="Retain & use current stored log files", required=False,
                         action="store_true")
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
     parsed_args = parser.parse_args()
-    if (parsed_args.log_path or parsed_args.log_preset) and not parsed_args.failover_logging:
-        parser.error("Both --log-path and --log-preset require --failover-logging to function.")
+    if (parsed_args.log_path or parsed_args.keep_logs) and not parsed_args.failover_logging:
+        parser.error("Both --log-path and --keep-logs require --failover-logging to function.")
+    if not parsed_args.log_path and parsed_args.keep_logs:
+        parser.error("--keep-logs requires --log-path to fetch custom logs.")
     return parsed_args
 
 
