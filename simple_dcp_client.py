@@ -109,6 +109,7 @@ def process_dcp_traffic(streams, args):
                         if args.failover_logging:
                             dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
+                        vb['timed-out'] = args.retry_limit
                     elif response['opcode'] == CMD_DELETION:
                         handleMutation(response)  # Printing untested with deletion, based on mutation
                         if args.failover_logging:
@@ -128,12 +129,24 @@ def process_dcp_traffic(streams, args):
                 else:
                     print '\nNo response'
             if vb['complete']:
-                # Need to close stream to vb - TODO: use a function of mc client instead of raw socket
-                header = struct.pack(RES_PKT_FMT,
-                                     REQ_MAGIC_BYTE,
-                                     CMD_CLOSE_STREAM,
-                                     0, 0, 0, vb['id'], 0, 0, 0)
-                dcp_client.s.sendall(header)
+                # Second-tier timeout - after the stream close to allow other vbuckets to execute
+                if vb['timed-out'] > 0:
+                    vb['complete'] = False
+                    active_streams += 1
+                    vb['timed-out'] -= 1
+                else:
+                    if vb['stream_open']:
+                        # Need to close stream to vb - TODO: use a function of mc client instead of raw socket
+                        header = struct.pack(RES_PKT_FMT,
+                                             REQ_MAGIC_BYTE,
+                                             CMD_CLOSE_STREAM,
+                                             0, 0, 0, vb['id'], 0, 0, 0)
+                        dcp_client.s.sendall(header)
+                        vb['stream_open'] = False
+                        if args.stream_req_info:
+                            print 'Stream to vbucket(s)', str(vb['id']), 'closed'
+
+
 
 
 def initiate_connection(args):
@@ -207,6 +220,7 @@ def add_streams(args):
     start_seq_no_list = args.start
     end_seq_no = args.end
     vb_uuid_list = args.uuid
+    vb_retry = args.retry_limit
     streams = []
 
     for index in xrange(0, len(vb_list)):
@@ -221,6 +235,8 @@ def add_streams(args):
             vb_stream = {"id": int(vb_list[index]),
                          "complete": False,
                          "keys_recvd": 0,
+                         "timed-out": vb_retry,  # Counts the amount of times that vb_stream gets timed out
+                         "stream_open": True,  # Details whether a vb stream is open to avoid repeatedly closing
                          "stream": stream
                          }
             streams.append(vb_stream)
@@ -287,8 +303,10 @@ def parseArguments():
     parser.add_argument("--delete_times", help="Include delete times", default=False, required=False,
                         action="store_true")
     parser.add_argument("--compression", '-y', help="Compression", required=False, action='count', default=0)
-    parser.add_argument("--timeout", '-t', help="Set timeout length in seconds, -1 disables timeout", required=False,
-                        default=5)
+    parser.add_argument("--timeout", '-t', help="Set vbucket connection timeout length in seconds, -1 disables timeout",
+                        required=False, default=5)
+    parser.add_argument("--retry-limit", help="Controls the amount of times that a vb stream connection is \
+    repeated without any activity (updates & deletions) before it is not retried", required=False, default=0, type=int)
     parser.add_argument("--noop-interval", help="Set time in seconds between NOOP requests", required=False)
     parser.add_argument("--opcode-dump", help="Dump all the received opcodes via print", required=False,
                         action="store_true")
@@ -315,6 +333,9 @@ def parseArguments():
         if len(parsed_args.vbuckets) != len(parsed_args.uuid):
             parser.error("If multiple vbuckets are being manually set, the same number of uuid's "
                          "must also be set")
+    if parsed_args.retry_limit and not parsed_args.timeout:
+        print 'Note: It is recommended that you set a shorter vbucket timeout (via -t or --timeout) \
+        when using --retry-limit'
     return parsed_args
 
 
