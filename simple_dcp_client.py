@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+import copy
 
 from dcp_data_persist import LogData
 from lib.dcp_bin_client import DcpClient
@@ -32,6 +33,7 @@ def handle_stream_create_response(dcpStream, args):
 
         if args.failover_logging and not args.keep_logs:  # keep_logs implies that there is a set of JSON log files
             dcp_log_data.upsert_failover(dcpStream.vbucket, dcpStream.failover_log)
+        return None
 
     elif dcpStream.status == ERR_NOT_MY_VBUCKET:
         print "NOT MY VBUCKET -", dcpStream.vbucket, 'does not live on this node'
@@ -41,6 +43,7 @@ def handle_stream_create_response(dcpStream, args):
     elif dcpStream.status == ERR_ROLLBACK:
         print "Server requests Rollback to sequence number:", dcpStream.rollback_seqno
         dcpStream = handle_rollback(dcpStream, args)
+        return dcpStream
 
     elif dcpStream.status == ERR_NOT_SUPPORTED:
         print "Error: Stream Create Request Not Supported"
@@ -49,8 +52,6 @@ def handle_stream_create_response(dcpStream, args):
     else:
         print "Unhandled Stream Create Response", dcpStream.status
         sys.exit(1)
-
-    return dcpStream
 
 
 def handleSystemEvent(response):
@@ -203,70 +204,80 @@ def initiate_connection(args):
 
 def add_streams(args):
     vb_list = args.vbuckets
-    start_seq_no = args.start
+    start_seq_no_list = args.start
     end_seq_no = args.end
-    vb_uuid = args.uuid
+    vb_uuid_list = args.uuid
     streams = []
 
-    print 'Sending add stream request(s)'
-    if args.stream_req_info:
-        print 'Stream to vbucket(s)', vb_list, 'with seq no', start_seq_no, 'and uuid', vb_uuid
-
-    for vb in vb_list:
-        stream = dcp_client.stream_req(vbucket=int(vb), takeover=0,
-                                       start_seqno=start_seq_no, end_seqno=end_seq_no, vb_uuid=vb_uuid)
-        handle_stream_create_response(stream, args)
-        vb_stream = {"id": int(vb),
-                     "complete": False,
-                     "keys_recvd": 0,
-                     "stream": stream
-                     }
-        streams.append(vb_stream)
+    for index in xrange(0, len(vb_list)):
+        if args.stream_req_info:
+            print 'Stream to vbucket', vb_list[index], 'with seq no', start_seq_no_list[index], \
+                'and uuid', vb_uuid_list[index]
+        stream = dcp_client.stream_req(vbucket=int(vb_list[index]), takeover=0,
+                                       start_seqno=int(start_seq_no_list[index]), end_seqno=end_seq_no,
+                                       vb_uuid=int(vb_uuid_list[index]))
+        handle_response = handle_stream_create_response(stream, args)
+        if handle_response is None:
+            vb_stream = {"id": int(vb_list[index]),
+                         "complete": False,
+                         "keys_recvd": 0,
+                         "stream": stream
+                         }
+            streams.append(vb_stream)
+        else:
+            for vb_stream in handle_response:
+                streams.append(vb_stream)
     return streams
 
 
 def handle_rollback(dcpStream, args):
     updated_dcpStreams = []
+    vb = dcpStream.vbucket
+    requested_rollback_no = dcpStream.rollback_seqno
 
     # If argument to use JSON log files
     if args.failover_logging:
-        log_fetch = dcp_log_data.get_failover_logs([dcpStream.vbucket])
-        if log_fetch.get(str(dcpStream.vbucket), None) is not None:  # If the failover log is not empty, use it
-            data = log_fetch[str(dcpStream.vbucket)]
-            rev_failover_values = sorted(data, key=lambda x: x[1])
+        log_fetch = dcp_log_data.get_failover_logs([vb])
+        if log_fetch.get(str(vb), None) is not None:  # If the failover log is not empty, use it
+            data = log_fetch[str(vb)]
+            failover_values = sorted(data, key=lambda x: x[1], reverse=True)
         else:
-            failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
+            failover_fetch = DcpClient.get_failover_log(dcp_client, int(vb))
             failover_values = failover_fetch.get('value')
-            rev_failover_values = failover_values[::-1]
 
     # Otherwise get failover log from server
     else:
-        failover_fetch = DcpClient.get_failover_log(dcp_client, dcpStream.vbucket)
+        failover_fetch = DcpClient.get_failover_log(dcp_client, int(vb))
         failover_values = failover_fetch.get('value')
-        rev_failover_values = failover_values[::-1]
 
-    for row in rev_failover_values:
-        server_last_seq_num = row[1]
-        server_vbucket_uuid = row[0]
-        args.start = server_last_seq_num
-        args.uuid = server_vbucket_uuid
+    new_seq_no = []
+    new_uuid = []
 
-        print 'Retrying stream add with seq', server_last_seq_num, 'and uuid', server_vbucket_uuid
-        updated_dcpStreams.insert(0, add_streams(args))
-        # NOTE: This means continuous failbacks makes client side recursive.
-        process_dcp_traffic(updated_dcpStreams[0], args)
-        # instead ensures that process finishes before moving onto the next, specifically because
-        # two streams with the same vbucket cannot occur.
+    for failover_log_entry in failover_values:
+        if failover_log_entry[1] <= requested_rollback_no:
+            failover_seq_num = failover_log_entry[1]  # closest Seq number in log
+            failover_vbucket_uuid = failover_log_entry[0]  # and its UUID
+            break
+    new_seq_no.append(failover_seq_num)
+    new_uuid.append(failover_vbucket_uuid)
 
-    return updated_dcpStreams[0]
+    print 'Retrying stream add on vb', vb, 'with seqs', new_seq_no, 'and uuids', new_uuid
+    # Input new Args for rollback stream request (separate to, but extending original args)
+    temp_args = copy.deepcopy(args)
+    temp_args.start = new_seq_no
+    temp_args.uuid = new_uuid
+    temp_args.vbuckets = [str(vb)]
+
+    # NOTE: This can cause continuous rollbacks making client side recursive dependent on failover logs.
+    return add_streams(temp_args)
 
 
 def parseArguments():
     parser = argparse.ArgumentParser(description='Create a simple DCP Consumer')
     parser.add_argument('--node', '-n', default="localhost:11210", help='Cluster Node to connect to (host:port)')
     parser.add_argument('--bucket', '-b', default="default", help='Bucket to connect to')
-    parser.add_argument('--vbuckets', '-v', nargs='+', default=[0], help='vbuckets to stream')
-    parser.add_argument('--start', '-s', default=0, type=int, help='start seq_num')
+    parser.add_argument('--vbuckets', '-v', nargs='+', default=[0], type=int, help='vbuckets to stream')
+    parser.add_argument('--start', '-s', default=['0'], nargs='+', help='start seq_num')
     parser.add_argument('--end', '-e', default=0xffffffffffffffff, type=int, help='end seq_num')
     parser.add_argument('--xattrs', '-x', help='Include Extended Attributes', default=False, action="store_true")
     parser.add_argument('--collections', '-c', help='Request Collections', default=False, action="store_true")
@@ -283,7 +294,7 @@ def parseArguments():
                         action="store_true")
     parser.add_argument("--stream-req-info", help="Display vbuckets, seq no's and uuid with every stream request",
                         required=False, action="store_true")
-    parser.add_argument("--uuid", help="Set the vbucket UUID", type=int, default=0, required=False)
+    parser.add_argument("--uuid", help="Set the vbucket UUID", default=['0'], nargs='+', required=False)
     parser.add_argument("--failover-logging", help="Enables use of persisted log JSON files for each vbucket, which \
     contain the failover log and sequence number", required=False, action='store_true')
     parser.add_argument("--log-path", help="Set the file path to use for the log files", default=None, required=False)
@@ -296,6 +307,14 @@ def parseArguments():
         parser.error("Both --log-path and --keep-logs require --failover-logging to function.")
     if not parsed_args.log_path and parsed_args.keep_logs:
         parser.error("--keep-logs requires --log-path to fetch custom logs.")
+    if parsed_args.start != ['0']:
+        if len(parsed_args.vbuckets) != len(parsed_args.start):
+            parser.error("If multiple vbuckets are being manually set, the same number of start sequence no's "
+                         "must also be set")
+    if parsed_args.uuid != ['0']:
+        if len(parsed_args.vbuckets) != len(parsed_args.uuid):
+            parser.error("If multiple vbuckets are being manually set, the same number of uuid's "
+                         "must also be set")
     return parsed_args
 
 
@@ -310,6 +329,12 @@ def convert_special_argument_parameters(args):
     if args.timeout == -1:
         args.timeout = 86400  # some very large number (one day)
 
+    if args.start == ['0'] and len(args.vbuckets) > 1:
+        args.start = ['0'] * len(args.vbuckets)
+
+    if args.uuid == ['0'] and len(args.vbuckets) > 1:
+        args.uuid = ['0'] * len(args.vbuckets)
+
     return args
 
 
@@ -317,6 +342,7 @@ if __name__ == "__main__":
     args = parseArguments()
     args = convert_special_argument_parameters(args)
     initiate_connection(args)
+    print 'Sending add stream request(s)'
     streams = add_streams(args)
     process_dcp_traffic(streams, args)
     print "Closing connection"
