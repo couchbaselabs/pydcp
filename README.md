@@ -33,3 +33,5 @@ The default host and port is 127.0.0.1:11211, but you can change these values by
 To run the suite with xmlrunner specify the '-x' or '--xml' option
 
 -h 10.5.2.100 -p 12000
+
+[Usage of simple_dcp_client.py](/simple_dcp_client.md)
