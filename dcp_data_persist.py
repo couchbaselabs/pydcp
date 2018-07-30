@@ -12,14 +12,27 @@ class LogData(object):
     """ Class to control instance of data for vbuckets
         If internal use is requested, 'None' should be passed into dirpath"""
 
-    def __init__(self, dirpath):
+    def __init__(self, dirpath, vbucket_list, keep_logs):
+        self.dictstore = {}
         if dirpath is not None:
             # Create with external file logging
             self.external = True
             self.path = os.path.join(dirpath, os.path.normpath('logs/'))
+            if keep_logs:
+                reset_list = []
+                preset_list = []
+                for vb in vbucket_list:
+                    if os.path.exists(self.get_path(vb)):
+                        preset_list.append(vb)
+                    else:
+                        reset_list.append(vb)
+                self.setup_log_preset(preset_list)
+            else:
+                reset_list = vbucket_list
+            self.reset(reset_list)
         else:
             self.external = False
-        self.dictstore = {}
+
 
     def setup_log_preset(self, vb_list):
         """ Used when --keep-logs is triggered, to move external data to dictstore """
@@ -47,9 +60,9 @@ class LogData(object):
 
     def reset(self, vb_list):
         """ Clears/makes files for list of virtual bucket numbers"""
-        self.dictstore = {}
-        if self.external:
-            for vb in vb_list:
+        for vb in vb_list:
+            self.dictstore[str(vb)] = {}
+            if self.external:
                 path_string = self.get_path(vb)
                 with open(path_string, 'w') as f:
                     json.dump({}, f)

@@ -170,7 +170,8 @@ def initiate_connection(args):
     global dcp_log_data
     if args.log_path:
         args.log_path = os.path.normpath(args.log_path)
-    dcp_log_data = LogData(args.log_path)
+
+    dcp_log_data = LogData(args.log_path, args.vbuckets, args.keep_logs)
 
     if stream_collections and filter_file != None:
         filter_file = open(args.filter, "r")
@@ -201,20 +202,6 @@ def initiate_connection(args):
         response = dcp_client.general_control("force_value_compression", "true")
         assert response['status'] == SUCCESS
         print "Forcing compression on connection"
-
-    if args.failover_logging:
-        if dcp_log_data.external and args.keep_logs:
-            reset_list = []
-            preset_list = []
-            for vb in args.vbuckets:
-                if os.path.exists(dcp_log_data.get_path(vb)):
-                    preset_list.append(vb)
-                else:
-                    reset_list.append(vb)
-            dcp_log_data.setup_log_preset(preset_list)
-        else:
-            reset_list = args.vbuckets
-        dcp_log_data.reset(reset_list)
 
 
 def add_streams(args):
