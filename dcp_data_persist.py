@@ -107,9 +107,9 @@ class LogData(object):
             with open(path_string, 'r') as vb_log:
                 data = json.load(vb_log)
 
-            data['old_seq_no'] = self.dictstore[str(vb)]['old_seq_no']
+            data['old_seq_no'] = self.dictstore[str(vb)].get('old_seq_no')
 
-            data['seq_no'] = self.dictstore[str(vb)]['seq_no']
+            data['seq_no'] = self.dictstore[str(vb)].get('seq_no')
 
             with open(path_string, 'w') as vb_log:
                 json.dump(data, vb_log)
