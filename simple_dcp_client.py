@@ -1,16 +1,13 @@
 #!/usr/bin/env python
 
-import pprint
-import time
-import sys
+import argparse
 import os
+import sys
+
 from dcp_data_persist import LogData
 from lib.dcp_bin_client import DcpClient
-from lib.mc_bin_client import MemcachedClient as McdClient
 from lib.mc_bin_client import MemcachedError
-
 from lib.memcacheConstants import *
-import argparse
 
 
 def check_for_features(xattrs=False, collections=False, compression=False):
