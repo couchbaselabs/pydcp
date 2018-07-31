@@ -3,6 +3,8 @@
 This Python script pretends to be a DCP client, to be used for testing purposes.
 
 ### Usage:
+Currently only python2 supported.
+
 In a terminal:
 ```
 cd /path/to/pydcp
@@ -24,7 +26,7 @@ python simple_dcp_client.py <arguments>
 * Delete times `--delete_times` Include delete times in stream
 * Compression `--compression`
 * Timeout `--timeout, -t` Sets the vbucket connection timeout length in seconds. `-t -1` disables timeout
-* Vb Stream Timeout `--vb-stream-timeout` Controls the number of times a vb stream connection is repeated without receiving any activity (updates, deletions, NOOPs etc) before it is closed completely. Defaults to 0
+* Retry limit `--retry-limit` Controls the number of times a vb stream connection is repeated without receiving any activity (updates, deletions, NOOPs etc) before it is closed completely. Defaults to 0
 * NOOP Interval `--noop-interval` Sets the time in seconds between NOOP requests from the server
 * Opcode Dump `--opcode-dump` Dumps all the received opcodes via print
 * Stream Request Info `--stream-req-info` Displays the vbuckets, sequence numbers and UUIDs on every stream request
