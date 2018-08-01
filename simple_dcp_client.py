@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 import argparse
+import copy
+import json
 import os
 import sys
-import copy
 
 from dcp_data_persist import LogData
 from lib.dcp_bin_client import DcpClient
@@ -11,7 +12,7 @@ from lib.mc_bin_client import MemcachedError
 from lib.memcacheConstants import *
 
 
-def check_for_features(xattrs=False, collections=False, compression=False):
+def check_for_features(dcp_client, xattrs=False, collections=False, compression=False):
     features = []
     if xattrs:
         features.append(HELO_XATTR)
@@ -26,10 +27,7 @@ def check_for_features(xattrs=False, collections=False, compression=False):
 
 def handle_stream_create_response(dcpStream, args):
     if dcpStream.status == SUCCESS:
-        if not args.stream_req_info:
-            print "Stream Opened Succesfully"
-        else:
-            print 'Stream Opened Successfully on vb', dcpStream.vbucket
+        print 'Stream Opened Successfully on vb', dcpStream.vbucket
 
         if args.failover_logging and not args.keep_logs:  # keep_logs implies that there is a set of JSON log files
             dcp_log_data.upsert_failover(dcpStream.vbucket, dcpStream.failover_log)
@@ -90,20 +88,19 @@ def process_dcp_traffic(streams, args):
     key_count = 0
     active_streams = len(streams)
     while active_streams > 0:
-        print "\rReceived " + str(key_count) + " keys",
-        sys.stdout.flush()
+        print "Received", str(key_count), "keys"
         for vb in streams:
             stream = vb['stream']
             if not vb['complete']:
                 if stream.has_response():
                     response = stream.next_response()
                     if response == None:
-                        print "\nNo response from vbucket", vb['id']
+                        print "No response from vbucket", vb['id']
                         vb['complete'] = True
                         active_streams -= 1
                         dcp_log_data.push_sequence_no(vb['id'])
                     elif response['opcode'] == CMD_STREAM_REQ:
-                        print "\nwasn't expecting a stream request"
+                        print "wasn't expecting a stream request"
                     elif response['opcode'] == CMD_MUTATION:
                         handleMutation(response)
                         if args.failover_logging:
@@ -116,18 +113,18 @@ def process_dcp_traffic(streams, args):
                             dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
                     elif response['opcode'] == CMD_SNAPSHOT_MARKER:
-                        print "\nReceived snapshot marker"
+                        print "Received snapshot marker from vbucket", vb['id']
                     elif response['opcode'] == CMD_SYSTEM_EVENT:
                         handleSystemEvent(response)
                     elif response['opcode'] == CMD_STREAM_END:
-                        print "\nReceived stream end. Stream complete."
+                        print "Received stream end. Stream complete."
                         vb['complete'] = True
                         active_streams -= 1
                         dcp_log_data.push_sequence_no(response['vbucket'])
                     else:
                         print 'Unhandled opcode:', response['opcode']
                 else:
-                    print '\nNo response'
+                    print 'No response'
             if vb['complete']:
                 # Second-tier timeout - after the stream close to allow other vbuckets to execute
                 if vb['timed-out'] > 0:
@@ -141,12 +138,10 @@ def process_dcp_traffic(streams, args):
                                              REQ_MAGIC_BYTE,
                                              CMD_CLOSE_STREAM,
                                              0, 0, 0, vb['id'], 0, 0, 0)
-                        dcp_client.s.sendall(header)
+                        select_dcp_client(vb['id']).s.sendall(header)
                         vb['stream_open'] = False
                         if args.stream_req_info:
                             print 'Stream to vbucket(s)', str(vb['id']), 'closed'
-
-
 
 
 def initiate_connection(args):
@@ -162,7 +157,6 @@ def initiate_connection(args):
     host, port = args.node.split(":")
     timeout = int(args.timeout)
 
-    global dcp_client
     dcp_client = DcpClient(host, int(port), timeout=timeout, do_auth=False)
     print 'Connected to:', node
 
@@ -172,17 +166,11 @@ def initiate_connection(args):
         print 'ERROR:', err
         sys.exit(1)
 
-    check_for_features(xattrs=stream_xattrs, collections=stream_collections, \
+    check_for_features(dcp_client, xattrs=stream_xattrs, collections=stream_collections, \
                        compression=use_compression)
 
     dcp_client.bucket_select(bucket)
-    print "Successfully AUTHed to ", bucket
-
-    global dcp_log_data
-    if args.log_path:
-        args.log_path = os.path.normpath(args.log_path)
-
-    dcp_log_data = LogData(args.log_path, args.vbuckets, args.keep_logs)
+    print "Successfully AUTHed to", bucket
 
     if stream_collections and filter_file != None:
         filter_file = open(args.filter, "r")
@@ -204,7 +192,7 @@ def initiate_connection(args):
         noop_interval = str(args.noop_interval)
         response2 = dcp_client.general_control("set_noop_interval", noop_interval)
         assert response2['status'] == SUCCESS
-        print "NOOP interval set to ", noop_interval
+        print "NOOP interval set to", noop_interval
 
     if args.opcode_dump:
         dcp_client.opcode_dump_control(True)
@@ -213,6 +201,8 @@ def initiate_connection(args):
         response = dcp_client.general_control("force_value_compression", "true")
         assert response['status'] == SUCCESS
         print "Forcing compression on connection"
+
+    return dcp_client
 
 
 def add_streams(args):
@@ -225,14 +215,15 @@ def add_streams(args):
 
     for index in xrange(0, len(vb_list)):
         if args.stream_req_info:
-            print 'Stream to vbucket', vb_list[index], 'with seq no', start_seq_no_list[index], \
-                'and uuid', vb_uuid_list[index]
-        stream = dcp_client.stream_req(vbucket=int(vb_list[index]), takeover=0,
+            print 'Stream to vbucket', vb_list[index], 'on node' , get_node_of_dcp_client_connection(vb_list[index]), \
+                'with seq no', start_seq_no_list[index], 'and uuid', vb_uuid_list[index]
+        vb = vb_list[index]
+        stream = select_dcp_client(vb).stream_req(vbucket=vb, takeover=0,
                                        start_seqno=int(start_seq_no_list[index]), end_seqno=end_seq_no,
                                        vb_uuid=int(vb_uuid_list[index]))
         handle_response = handle_stream_create_response(stream, args)
         if handle_response is None:
-            vb_stream = {"id": int(vb_list[index]),
+            vb_stream = {"id": vb_list[index],
                          "complete": False,
                          "keys_recvd": 0,
                          "timed-out": vb_retry,  # Counts the amount of times that vb_stream gets timed out
@@ -258,16 +249,18 @@ def handle_rollback(dcpStream, args):
             data = log_fetch[str(vb)]
             failover_values = sorted(data, key=lambda x: x[1], reverse=True)
         else:
-            failover_fetch = DcpClient.get_failover_log(dcp_client, int(vb))
+            failover_fetch = DcpClient.get_failover_log(select_dcp_client(vb), vb)
             failover_values = failover_fetch.get('value')
 
     # Otherwise get failover log from server
     else:
-        failover_fetch = DcpClient.get_failover_log(dcp_client, int(vb))
+        failover_fetch = DcpClient.get_failover_log(select_dcp_client(vb), vb)
         failover_values = failover_fetch.get('value')
 
     new_seq_no = []
     new_uuid = []
+    failover_seq_num = 0        # Default values so that if they don't get set
+    failover_vbucket_uuid = 0   # inside the for loop, 0 is used.
 
     for failover_log_entry in failover_values:
         if failover_log_entry[1] <= requested_rollback_no:
@@ -282,10 +275,62 @@ def handle_rollback(dcpStream, args):
     temp_args = copy.deepcopy(args)
     temp_args.start = new_seq_no
     temp_args.uuid = new_uuid
-    temp_args.vbuckets = [str(vb)]
+    temp_args.vbuckets = [vb]
 
     # NOTE: This can cause continuous rollbacks making client side recursive dependent on failover logs.
     return add_streams(temp_args)
+
+
+def initialise_cluster_connections(args):
+    init_dcp_client = initiate_connection(args)
+
+    config_json = json.loads(DcpClient.get_config(init_dcp_client)[2])
+    global vb_map
+    vb_map = config_json['vBucketServerMap']['vBucketMap']
+
+    global dcp_client_dict
+    dcp_client_dict = {}
+
+    global dcp_log_data
+    if args.log_path:
+        args.log_path = os.path.normpath(args.log_path)
+    dcp_log_data = LogData(args.log_path, args.vbuckets, args.keep_logs)
+
+    # TODO: Remove globals and restructure (possibly into a class) to allow for multiple
+    #       instances of the client (allowing multiple bucket connections)
+
+    for index, node_dict in enumerate(config_json['nodesExt']):
+        # 'vbmap id' = index, 'node' = node_dict['hostname']
+        temp_args = copy.deepcopy(args)
+        host = node_dict['hostname']
+        port = node_dict['services'].get('kv')
+        if port is not None:
+            temp_args.node = '{}:{}'.format(host, port)
+            if 'thisNode' in node_dict:
+                dcp_client_dict[index] = {'stream': init_dcp_client,
+                                          'node': temp_args.node}
+            else:
+                dcp_client_dict[index] = {'stream': initiate_connection(temp_args),
+                                          'node': temp_args.node}
+
+
+def select_dcp_client(vb):
+    main_node_id = vb_map[vb][0]
+
+    # TODO: Adding support if not my vbucket received to use replica node.
+    # if len(vb_map[vb]) > 1:
+    #     replica1_node_id = vb_map[vb][1]
+    # if len(vb_map[vb]) > 2:
+    #     replica2_node_id = vb_map[vb][2]
+    # if len(vb_map[vb]) > 3:
+    #     replica3_node_id = vb_map[vb][3]
+
+    return dcp_client_dict[main_node_id]['stream']
+
+
+def get_node_of_dcp_client_connection(vb):
+    node_id = vb_map[vb][0]
+    return dcp_client_dict[node_id]['node']
 
 
 def parseArguments():
@@ -340,12 +385,12 @@ def parseArguments():
 
 
 def convert_special_argument_parameters(args):
-    if args.vbuckets == ['-1']:
-        int_to_string = []
+    if args.vbuckets == [-1]:
+        vb_list = []
         for i in range(0,1024):
             if i not in range(170, 256):
-                int_to_string.append(str(i))
-        args.vbuckets = int_to_string
+                vb_list.append(i)
+        args.vbuckets = vb_list
 
     if args.timeout == -1:
         args.timeout = 86400  # some very large number (one day)
@@ -362,9 +407,10 @@ def convert_special_argument_parameters(args):
 if __name__ == "__main__":
     args = parseArguments()
     args = convert_special_argument_parameters(args)
-    initiate_connection(args)
-    print 'Sending add stream request(s)'
+    initialise_cluster_connections(args)
+    print 'Sending add vb stream request(s)'
     streams = add_streams(args)
     process_dcp_traffic(streams, args)
     print "Closing connection"
-    dcp_client.close()
+    for client_stream in dcp_client_dict.values():
+        client_stream['stream'].close()
