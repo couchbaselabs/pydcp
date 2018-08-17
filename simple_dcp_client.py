@@ -142,6 +142,7 @@ def process_dcp_traffic(streams, args):
                         vb['stream_open'] = False
                         if args.stream_req_info:
                             print 'Stream to vbucket(s)', str(vb['id']), 'closed'
+    print "Ended with", key_count, "keys"
 
 
 def initiate_connection(args):
@@ -155,7 +156,7 @@ def initiate_connection(args):
     filter_file = args.filter
     filter_json = ''
     host, port = args.node.split(":")
-    timeout = int(args.timeout)
+    timeout = args.timeout
 
     dcp_client = DcpClient(host, int(port), timeout=timeout, do_auth=False)
     print 'Connected to:', node
@@ -298,15 +299,17 @@ def initialise_cluster_connections(args):
 
     # TODO: Remove globals and restructure (possibly into a class) to allow for multiple
     #       instances of the client (allowing multiple bucket connections)
-
-    for index, node_dict in enumerate(config_json['nodesExt']):
-        # 'vbmap id' = index, 'node' = node_dict['hostname']
+    node_list = []
+    for index, server in enumerate(config_json['vBucketServerMap']['serverList']):
         temp_args = copy.deepcopy(args)
-        host = node_dict['hostname']
-        port = node_dict['services'].get('kv')
+        node = server.split(':')[0]
+        host = node
+        node_list.append(node)
+        port = config_json['nodesExt'][index]['services'].get('kv')
+
         if port is not None:
             temp_args.node = '{}:{}'.format(host, port)
-            if 'thisNode' in node_dict:
+            if 'thisNode' in config_json['nodesExt'][index]:
                 dcp_client_dict[index] = {'stream': init_dcp_client,
                                           'node': temp_args.node}
             else:
@@ -349,7 +352,7 @@ def parseArguments():
                         action="store_true")
     parser.add_argument("--compression", '-y', help="Compression", required=False, action='count', default=0)
     parser.add_argument("--timeout", '-t', help="Set vbucket connection timeout length in seconds, -1 disables timeout",
-                        required=False, default=5)
+                        required=False, default=5, type=float)
     parser.add_argument("--retry-limit", help="Controls the amount of times that a vb stream connection is \
     repeated without any activity (updates & deletions) before it is not retried", required=False, default=0, type=int)
     parser.add_argument("--noop-interval", help="Set time in seconds between NOOP requests", required=False)
@@ -387,9 +390,8 @@ def parseArguments():
 def convert_special_argument_parameters(args):
     if args.vbuckets == [-1]:
         vb_list = []
-        for i in range(0,1024):
-            if i not in range(170, 256):
-                vb_list.append(i)
+        for i in range(0, 1024):
+            vb_list.append(i)
         args.vbuckets = vb_list
 
     if args.timeout == -1:
