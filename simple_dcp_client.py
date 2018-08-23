@@ -53,12 +53,11 @@ def handle_stream_create_response(dcpStream, args):
 
 
 def handleSystemEvent(response):
+    manifest, cid = struct.unpack(">QI", response['value'])
     if response['event'] == EVENT_CREATE_COLLECTION:
-        print "DCP Event: Collection {} created at seqno: {}".format(response['key'], response['seqno'])
+        print "DCP Event: Collection {} from manifest {} created at seqno: {}".format(cid, manifest, response['seqno'])
     elif response['event'] == EVENT_DELETE_COLLECTION:
-        print "DCP Event: Collection {} deleted at seqno: {}".format(response['key'], response['seqno'])
-    elif response['event'] == EVENT_COLLECTION_SEPARATOR:
-        print "DCP Event: Collection Separator changed to {} at seqno: {}".format(response['key'], response['seqno'])
+        print "DCP Event: Collection {} from manifest {} deleted at seqno: {}".format(cid, manifest, response['seqno'])
     else:
         print "Unknown DCP Event:", response['event']
 
@@ -68,11 +67,7 @@ def handleMutation(response):
     seqno = response['by_seqno']
     output_string = ""
     if args.keys:
-        clen = response['collection_len']
-        if clen > 0:
-            print 'KEY:{0} from collection: {1}'.format(response['key'], response['key'][:clen])
-        else:
-            output_string += "KEY:" + response['key'] + ' vb ' + str(vb)
+        output_string += "KEY:" + response['key'] + " from collection:" + str(response['collection_id']) + " vb:" + str(vb)
     if args.docs:
         output_string += "BODY:" + response['value']
     if args.xattrs:
@@ -176,7 +171,7 @@ def initiate_connection(args):
         filter_file = open(args.filter, "r")
         filter_json = filter_file.read()
         print "DCP Open filter: {}".format(filter_json)
-    response = dcp_client.open_producer("python stream",
+    response = dcp_client.open_producer("pydcp stream",
                                         xattr=stream_xattrs,
                                         delete_times=include_delete_times,
                                         collections=stream_collections,
@@ -344,7 +339,7 @@ def parseArguments():
     parser.add_argument('--collections', '-c', help='Request Collections', default=False, action="store_true")
     parser.add_argument('--keys', '-k', help='Dump keys', default=False, action="store_true")
     parser.add_argument('--docs', '-d', help='Dump document', default=False, action="store_true")
-    parser.add_argument("--filter", '-f', help="DCP Filter", required=False)
+    parser.add_argument("--filter", '-f', help="DCP Collections Filter", required=False)
     parser.add_argument("--delete_times", help="Include delete times", default=False, required=False,
                         action="store_true")
     parser.add_argument("--compression", '-y', help="Compression", required=False, action='count', default=0)
