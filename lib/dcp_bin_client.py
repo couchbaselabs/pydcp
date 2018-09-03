@@ -30,6 +30,8 @@ class DcpClient(MemcachedClient):
 
         # Option to print out opcodes received
         self._opcode_dump = False
+        
+        self._stream_timeout = False
 
     def _open(self, op):
         return self._handle_op(op)
@@ -191,7 +193,9 @@ class DcpClient(MemcachedClient):
 
         while True:
             try:
-
+                if self._stream_timeout:
+                    return None
+                
                 opcode, status, opaque, cas, keylen, extlen, dtype, body = \
                     self._recvMsg()
 
@@ -229,6 +233,9 @@ class DcpClient(MemcachedClient):
                 if 'died' in str(ex):
                     return {'opcode': op.opcode,
                             'status': 0xff}
+                elif 'Timeout' in str(ex):
+                    self._stream_timeout = True
+                    return None
                 else:
                     return None
 
