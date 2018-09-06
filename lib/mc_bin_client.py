@@ -5,6 +5,7 @@ Binary memcached test client.
 Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
+import array
 import hmac
 import socket
 import select
@@ -18,6 +19,25 @@ from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, INCRDECR_RES_FMT
 import memcacheConstants
+
+def decodeCollectionID(key):
+    # A leb128 varint encodes the CID
+    data = array.array('B', key)
+    cid = data[0] & 0x7f
+    end = 1
+    if (data[0] & 0x80) == 0x80:
+        shift =7
+        for end in range(1, len(data)):
+            cid |= ((data[end] & 0x7f) << shift)
+            if (data[end] & 0x80) == 0:
+                break
+            shift = shift + 7
+
+        end = end + 1
+        if end == len(data):
+            #  We should of stopped for a stop byte, not the end of the buffer
+            raise exceptions.ValueError("encoded key did not contain a stop byte")
+    return cid, key[end:]
 
 class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""

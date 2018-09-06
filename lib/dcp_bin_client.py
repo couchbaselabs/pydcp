@@ -1,5 +1,5 @@
 import random
-from mc_bin_client import MemcachedClient
+from mc_bin_client import MemcachedClient,decodeCollectionID
 from memcacheConstants import *
 import Queue
 import time
@@ -50,7 +50,7 @@ class DcpClient(MemcachedClient):
         """ opens an dcp producer connection """
         self.collections = collections
         self.delete_times = delete_times
-        op = OpenProducer(name, xattr, delete_times, collections, json)
+        op = OpenProducer(name,xattr,delete_times,json)
         return self._open(op)
 
     def open_notifier(self, name):
@@ -258,7 +258,7 @@ class DcpClient(MemcachedClient):
 
     def opcode_dump_control(self, control):
         self._opcode_dump = control
-        
+
     def opcode_lookup(self, opcode):
         from memcacheConstants import DCP_Opcode_Dictionary
         return DCP_Opcode_Dictionary.get(opcode, 'Unknown Opcode')
@@ -384,12 +384,10 @@ class OpenConsumer(Open):
 class OpenProducer(Open):
     """ Open producer spec """
 
-    def __init__(self, name, xattr, delete_times, collection, json):
+    def __init__(self, name, xattr, delete_times, json):
         flags = FLAG_OPEN_PRODUCER
         if xattr:
             flags |= FLAG_OPEN_INCLUDE_XATTRS
-        if collection:
-            flags |= FLAG_OPEN_COLLECTIONS
         if delete_times:
             flags |= FLAG_OPEN_INCLUDE_DELETE_TIMES
         Open.__init__(self, name, flags, json)
@@ -523,7 +521,6 @@ class StreamRequest(Operation):
         adjusted_time = None
         conflict_resolution_mode = 0
         xattrs = None
-        clen = 0
 
         if opcode == CMD_STREAM_REQ:
 
@@ -558,16 +555,20 @@ class StreamRequest(Operation):
                         'flags': flags}
 
         elif opcode == CMD_MUTATION:
+            header_len = 31
+            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
+                struct.unpack(">QQIIIHB", body[0:header_len])
+            key = body[header_len:header_len+keylen]
+            value = body[header_len+keylen: len(body)- ext_meta_len]
+
             if self.collection_filtering:
-                header_len = 32
-                by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru, clen = \
-                    struct.unpack(">QQIIIHBB", body[0:header_len])
+                # Decode the CID from key
+                collection_id, key = decodeCollectionID(key)
             else:
-                header_len = 31
-                by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
-                    struct.unpack(">QQIIIHB", body[0:header_len])
-            key = body[header_len:header_len + keylen]
-            value = body[header_len + keylen: len(body) - ext_meta_len]
+                # Belongs to default collection
+                # Should really lookup the CID in the Manifest for _default
+                collection_id = 0
+
             if ext_meta_len > 0:
                 adjusted_time, conflict_resolution_mode = self.parse_extended_meta_data(body[len(body) - ext_meta_len:])
             if (dtype & DATATYPE_XATTR):
@@ -575,28 +576,28 @@ class StreamRequest(Operation):
                 xattrs = self.parse_extended_attributes(value[4:], total_xattr_len)
                 value = value[total_xattr_len + 4:]
 
-            response = {'opcode': opcode,
-                        'vbucket': status,
-                        'by_seqno': by_seqno,
-                        'rev_seqno': rev_seqno,
-                        'flags': flags,
-                        'expiration': exp,
-                        'lock_time': lock_time,
-                        'nmeta': ext_meta_len,
-                        'nru': nru,
-                        'key': key,
-                        'value': value,
-                        'adjusted_time': adjusted_time,
-                        'conflict_resolution_mode': conflict_resolution_mode,
-                        'xattrs': xattrs,
-                        'collection_len': clen}
+            response = { 'opcode'     : opcode,
+                         'vbucket'    : status,
+                         'by_seqno'   : by_seqno,
+                         'rev_seqno'  : rev_seqno,
+                         'flags'      : flags,
+                         'expiration' : exp,
+                         'lock_time'  : lock_time,
+                         'nmeta'      : ext_meta_len,
+                         'nru'        : nru,
+                         'key'        : key,
+                         'value'      : value,
+                         'adjusted_time': adjusted_time,
+                         'conflict_resolution_mode': conflict_resolution_mode,
+                         'xattrs'     : xattrs,
+                         'collection_id' : collection_id}
 
         elif opcode == CMD_DELETION:
             delete_time = 0
             ext_meta_len = 0
-            if self.collection_filtering or self.delete_times:
+            if self.delete_times:
                 header_len = 21
-                by_seqno, rev_seqno, delete_time, clen = \
+                by_seqno, rev_seqno, delete_time, unused = \
                     struct.unpack(">QQIB", body[0:21])
             else:
                 header_len = 18
@@ -605,19 +606,27 @@ class StreamRequest(Operation):
 
             key = body[header_len:header_len + keylen]
 
+            if self.collection_filtering:
+                # Decode the CID from key
+                collection_id, key = decodeCollectionID(key)
+            else:
+                # Belongs to default collection
+                # Should really lookup the CID in the Manifest for _default
+                collection_id = 0
+
             if ext_meta_len > 0:
                 adjusted_time, conflict_resolution_mode = \
-                    self.parse_extended_meta_data(body[len(body) - ext_meta_len:])
+                    self.parse_extended_meta_data(body[len(body)- ext_meta_len:])
 
-            response = {'opcode': opcode,
-                        'vbucket': status,
-                        'by_seqno': by_seqno,
-                        'rev_seqno': rev_seqno,
-                        'key': key,
-                        'adjusted_time': adjusted_time,
-                        'conflict_resolution_mode': conflict_resolution_mode,
-                        'delete_time': delete_time,
-                        'collection_len': clen}
+            response = { 'opcode'     : opcode,
+                         'vbucket'    : status,
+                         'by_seqno'   : by_seqno,
+                         'rev_seqno'  : rev_seqno,
+                         'key'        : key,
+                         'adjusted_time': adjusted_time,
+                         'conflict_resolution_mode': conflict_resolution_mode,
+                         'delete_time' : delete_time,
+                         'collection_id' : collection_id}
 
         elif opcode == CMD_SNAPSHOT_MARKER:
 
@@ -638,14 +647,17 @@ class StreamRequest(Operation):
                         'snap_end_seqno': snap_end,
                         'flag': flag}
 
-        elif opcode == 0x5f:
+        elif opcode == CMD_SYSTEM_EVENT:
+            header_len = 12
             seqno, event = \
                 struct.unpack(">QI", body[0:12])
-            key = body[12:12 + keylen]
-            response = {'opcode': opcode,
-                        'seqno': seqno,
-                        'event': event,
-                        'key': key}
+            key = body[header_len:header_len+keylen]
+            value = body[header_len+keylen:]
+            response = { 'opcode' : opcode,
+                         'seqno' : seqno,
+                         'event' : event,
+                         'key' : key,
+                         'value' : value}
         else:
             response = {'err_msg': "(Stream Request) Unknown response",
                         'opcode': opcode,
