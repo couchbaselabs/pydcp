@@ -303,7 +303,7 @@ def initialise_cluster_connections(args):
         port = config_json['nodesExt'][index]['services'].get('kv')
 
         if port is not None:
-            temp_args.node = '{}:{}'.format(host, port)
+            temp_args.node = '{0}:{1}'.format(host, port)
             if 'thisNode' in config_json['nodesExt'][index]:
                 dcp_client_dict[index] = {'stream': init_dcp_client,
                                           'node': temp_args.node}
