@@ -67,7 +67,7 @@ def handleMutation(response):
     seqno = response['by_seqno']
     output_string = ""
     if args.keys:
-        output_string += "KEY:" + response['key'] + " from collection:" + str(response['collection_id']) + " vb:" + str(vb)
+        output_string += "KEY:" + response['key'] + " from collection:" + str(response['collection_id']) + ", vb:" + str(vb) + " "
     if args.docs:
         output_string += "BODY:" + response['value']
     if args.xattrs:
@@ -148,8 +148,6 @@ def initiate_connection(args):
     stream_collections = args.collections
     use_compression = (args.compression > 0)
     force_compression = (args.compression > 1)
-    filter_file = args.filter
-    filter_json = ''
     host, port = args.node.split(":")
     timeout = args.timeout
 
@@ -168,15 +166,10 @@ def initiate_connection(args):
     dcp_client.bucket_select(bucket)
     print "Successfully AUTHed to", bucket
 
-    if stream_collections and filter_file != None:
-        filter_file = open(args.filter, "r")
-        filter_json = filter_file.read()
-        print "DCP Open filter: {}".format(filter_json)
     response = dcp_client.open_producer("pydcp stream",
                                         xattr=stream_xattrs,
                                         delete_times=include_delete_times,
-                                        collections=stream_collections,
-                                        json=filter_json)
+                                        collections=stream_collections)
     assert response['status'] == SUCCESS
     print "Opened DCP consumer connection"
 
@@ -207,16 +200,27 @@ def add_streams(args):
     end_seq_no = args.end
     vb_uuid_list = args.uuid
     vb_retry = args.retry_limit
+    filter_file = args.filter
+    filter_json = ''
+    stream_collections = args.collections
     streams = []
+
+    if stream_collections and filter_file != None:
+        filter_file = open(args.filter, "r")
+        filter_json = filter_file.read()
+        print "DCP Open filter: {}".format(filter_json)
 
     for index in xrange(0, len(vb_list)):
         if args.stream_req_info:
             print 'Stream to vbucket', vb_list[index], 'on node' , get_node_of_dcp_client_connection(vb_list[index]), \
                 'with seq no', start_seq_no_list[index], 'and uuid', vb_uuid_list[index]
         vb = vb_list[index]
-        stream = select_dcp_client(vb).stream_req(vbucket=vb, takeover=0,
-                                       start_seqno=int(start_seq_no_list[index]), end_seqno=end_seq_no,
-                                       vb_uuid=int(vb_uuid_list[index]))
+        stream = select_dcp_client(vb).stream_req(vbucket=vb,
+                                                  takeover=0,
+                                                  start_seqno=int(start_seq_no_list[index]),
+                                                  end_seqno=end_seq_no,
+                                                  vb_uuid=int(vb_uuid_list[index]),
+                                                  json=filter_json)
         handle_response = handle_stream_create_response(stream, args)
         if handle_response is None:
             vb_stream = {"id": vb_list[index],

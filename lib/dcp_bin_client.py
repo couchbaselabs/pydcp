@@ -30,7 +30,7 @@ class DcpClient(MemcachedClient):
 
         # Option to print out opcodes received
         self._opcode_dump = False
-        
+
         self._stream_timeout = False
 
     def _open(self, op):
@@ -46,11 +46,11 @@ class DcpClient(MemcachedClient):
         op = OpenConsumer(name)
         return self._open(op)
 
-    def open_producer(self, name, xattr=False, delete_times=False, collections=False, json=''):
+    def open_producer(self, name, xattr=False, delete_times=False, collections=False):
         """ opens an dcp producer connection """
         self.collections = collections
         self.delete_times = delete_times
-        op = OpenProducer(name,xattr,delete_times,json)
+        op = OpenProducer(name,xattr,delete_times)
         return self._open(op)
 
     def open_notifier(self, name):
@@ -114,7 +114,7 @@ class DcpClient(MemcachedClient):
         return self._handle_op(op)
 
     def stream_req(self, vbucket, takeover, start_seqno, end_seqno,
-                   vb_uuid, snap_start=None, snap_end=None):
+                   vb_uuid, snap_start=None, snap_end=None, json=''):
         """" sent to dcp-producer to stream mutations from
              a particular vbucket.
 
@@ -129,8 +129,16 @@ class DcpClient(MemcachedClient):
              snapt_start = start seqno of snapshot
              snap_end = end seqno of snapshot """
 
-        op = StreamRequest(vbucket, takeover, start_seqno, end_seqno,
-                           vb_uuid, snap_start, snap_end, delete_times=self.delete_times, collections=self.collections)
+        op = StreamRequest(vbucket,
+                           takeover,
+                           start_seqno,
+                           end_seqno,
+                           vb_uuid,
+                           snap_start,
+                           snap_end,
+                           delete_times=self.delete_times,
+                           collections=self.collections,
+                           json=json)
 
         response = self._handle_op(op)
 
@@ -195,7 +203,7 @@ class DcpClient(MemcachedClient):
             try:
                 if self._stream_timeout:
                     return None
-                
+
                 opcode, status, opaque, cas, keylen, extlen, dtype, body = \
                     self._recvMsg()
 
@@ -367,11 +375,11 @@ class Operation(object):
 class Open(Operation):
     """ Open connection base class """
 
-    def __init__(self, name, flag, json):
+    def __init__(self, name, flag):
         opcode = CMD_OPEN
         key = name
         extras = struct.pack(">iI", 0, flag)
-        Operation.__init__(self, opcode, key, value=json, extras=extras)
+        Operation.__init__(self, opcode, key, extras=extras)
 
 
 class OpenConsumer(Open):
@@ -384,20 +392,20 @@ class OpenConsumer(Open):
 class OpenProducer(Open):
     """ Open producer spec """
 
-    def __init__(self, name, xattr, delete_times, json):
+    def __init__(self, name, xattr, delete_times):
         flags = FLAG_OPEN_PRODUCER
         if xattr:
             flags |= FLAG_OPEN_INCLUDE_XATTRS
         if delete_times:
             flags |= FLAG_OPEN_INCLUDE_DELETE_TIMES
-        Open.__init__(self, name, flags, json)
+        Open.__init__(self, name, flags)
 
 
 class OpenNotifier(Open):
     """ Open notifier spec """
 
     def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_NOTIFIER, json='')
+        Open.__init__(self, name, FLAG_OPEN_NOTIFIER)
 
 
 class CloseStream(Operation):
@@ -438,7 +446,7 @@ class StreamRequest(Operation):
 
     def __init__(self, vbucket, takeover, start_seqno, end_seqno,
                  vb_uuid, snap_start=None, snap_end=None,
-                 collections=False, delete_times=False):
+                 collections=False, delete_times=False, json=''):
 
         if snap_start is None:
             snap_start = start_seqno
@@ -454,6 +462,7 @@ class StreamRequest(Operation):
                              snap_end)
 
         Operation.__init__(self, opcode,
+                           value=json,
                            extras=extras,
                            vbucket=vbucket)
         self.start_seqno = start_seqno
