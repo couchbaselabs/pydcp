@@ -149,6 +149,7 @@ def initiate_connection(args):
     use_compression = (args.compression > 0)
     force_compression = (args.compression > 1)
     host, port = args.node.split(":")
+    host = check_valid_host(host, 'User Input')
     timeout = args.timeout
 
     dcp_client = DcpClient(host, int(port), timeout=timeout, do_auth=False)
@@ -301,9 +302,8 @@ def initialise_cluster_connections(args):
     node_list = []
     for index, server in enumerate(config_json['vBucketServerMap']['serverList']):
         temp_args = copy.deepcopy(args)
-        node = server.split(':')[0]
-        host = node
-        node_list.append(node)
+        host = check_valid_host(server.split(':')[0], 'Server Config Cluster Map')
+        node_list.append(host)
         port = config_json['nodesExt'][index]['services'].get('kv')
 
         if port is not None:
@@ -403,6 +403,26 @@ def convert_special_argument_parameters(args):
         args.uuid = ['0'] * len(args.vbuckets)
 
     return args
+
+def check_valid_host(host, errorOrigin):
+    separate_host = host.split('.')
+    if len(separate_host) == 4:
+        for num in separate_host:
+            if int(num) < 0 or int(num) > 255:
+                raise IndexError("The inputted host (",
+                                 host,
+                                 ") has an ip address outside the standardised range. "
+                                 "Error origin:", errorOrigin)
+        return host
+    else:
+        if host == 'localhost':
+            return host
+        elif host == '$HOST':
+            print("'$HOST' received as a stream request host input, which is invalid. "
+                  "Trying to use 'localhost' instead")
+            return 'localhost'
+        else:
+            raise StandardError("Invalid host input", host, "Error origin:", errorOrigin)
 
 
 if __name__ == "__main__":
