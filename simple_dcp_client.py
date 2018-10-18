@@ -53,11 +53,11 @@ def handle_stream_create_response(dcpStream, args):
 
 
 def handleSystemEvent(response):
-    manifest, cid = struct.unpack(">QI", response['value'])
+    manifest, sid, cid = struct.unpack(">QII", response['value'])
     if response['event'] == EVENT_CREATE_COLLECTION:
-        print "DCP Event: Collection {} from manifest {} created at seqno: {}".format(cid, manifest, response['seqno'])
+        print "DCP Event: Collection {} in scope {} from manifest {} created at seqno: {}".format(cid, sid, manifest, response['seqno'])
     elif response['event'] == EVENT_DELETE_COLLECTION:
-        print "DCP Event: Collection {} from manifest {} deleted at seqno: {}".format(cid, manifest, response['seqno'])
+        print "DCP Event: Collection {} in scope {} from manifest {} deleted at seqno: {}".format(cid, sid, manifest, response['seqno'])
     else:
         print "Unknown DCP Event:", response['event']
 
