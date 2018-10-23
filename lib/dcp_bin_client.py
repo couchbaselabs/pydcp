@@ -300,7 +300,7 @@ class DcpStream(object):
 
         if response:
 
-            if response['opcode'] in (CMD_MUTATION, CMD_DELETION):
+            if response['opcode'] in (CMD_MUTATION, CMD_DELETION, CMD_EXPIRATION):
                 assert int(response['vbucket']) == self.vbucket
 
                 assert 'by_seqno' in response, \
@@ -634,6 +634,32 @@ class StreamRequest(Operation):
                          'key'        : key,
                          'adjusted_time': adjusted_time,
                          'conflict_resolution_mode': conflict_resolution_mode,
+                         'delete_time' : delete_time,
+                         'collection_id' : collection_id}
+
+        elif opcode == CMD_EXPIRATION:
+            assert self.delete_times, "Delete times must be enabled to " \
+                                      "support expiration"
+
+            header_len = 20
+            by_seqno, rev_seqno, delete_time = \
+                struct.unpack(">QQI", body[0:20])
+
+            key = body[header_len:header_len + keylen]
+
+            if self.collection_filtering:
+                # Decode the CID from key
+                collection_id, key = decodeCollectionID(key)
+            else:
+                # Belongs to default collection
+                # Should really lookup the CID in the Manifest for _default
+                collection_id = 0
+
+            response = { 'opcode'     : opcode,
+                         'vbucket'    : status,
+                         'by_seqno'   : by_seqno,
+                         'rev_seqno'  : rev_seqno,
+                         'key'        : key,
                          'delete_time' : delete_time,
                          'collection_id' : collection_id}
 
