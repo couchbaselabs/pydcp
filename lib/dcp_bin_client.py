@@ -657,16 +657,17 @@ class StreamRequest(Operation):
                         'flag': flag}
 
         elif opcode == CMD_SYSTEM_EVENT:
-            header_len = 12
-            seqno, event = \
-                struct.unpack(">QI", body[0:12])
+            header_len = 13
+            seqno, event, version = \
+                struct.unpack(">QIB", body[0:13])
             key = body[header_len:header_len+keylen]
             value = body[header_len+keylen:]
             response = { 'opcode' : opcode,
                          'seqno' : seqno,
                          'event' : event,
                          'key' : key,
-                         'value' : value}
+                         'value' : value,
+                         'version' : version}
         else:
             response = {'err_msg': "(Stream Request) Unknown response",
                         'opcode': opcode,
