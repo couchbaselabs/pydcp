@@ -52,15 +52,83 @@ def handle_stream_create_response(dcpStream, args):
         sys.exit(1)
 
 
-def handleSystemEvent(response):
-    manifest, sid, cid = struct.unpack(">QII", response['value'])
+def handleSystemEvent(response, manifest):
+    # Unpack a DCP system event
     if response['event'] == EVENT_CREATE_COLLECTION:
-        print "DCP Event: Collection {} in scope {} from manifest {} created at seqno: {}".format(cid, sid, manifest, response['seqno'])
+        if response['version'] == 0:
+            uid, sid, cid = struct.unpack(">QII", response['value'])
+            print "DCP Event: Collection {} id:{} in scope:{} from manifest {}"\
+                  " created at seqno: {}".format(response['key'],
+                                                 cid,
+                                                 sid,
+                                                 uid,
+                                                 response['seqno'])
+            manifest['uid'] = uid
+            for e in manifest['scopes']:
+                if e['uid'] == sid:
+                    e['collections'].append({'name':response['key'], 'uid':cid});
+
+        elif response['version'] == 1:
+            uid, sid, cid, ttl = struct.unpack(">QIII", response['value'])
+            print "DCP Event: Collection {} id:{} in scope:{} with ttl:{} from "\
+                  "manifest {} created at seqno: {}".format(response['key'],
+                                                            cid,
+                                                            sid,
+                                                            ttl,
+                                                            uid,
+                                                            response['seqno'])
+            manifest['uid'] = uid
+            for e in manifest['scopes']:
+                if e['uid'] == sid:
+                    e['collections'].append({'name':response['key'],
+                                             'uid':cid,
+                                             'max_ttl':max_ttl});
+        else:
+            print "Unknown DCP Event version:", response['version']
+
     elif response['event'] == EVENT_DELETE_COLLECTION:
-        print "DCP Event: Collection {} in scope {} from manifest {} deleted at seqno: {}".format(cid, sid, manifest, response['seqno'])
+        # We can receive delete collection without a corresponding create, this
+        # will happen when only the tombstone of a collection remains
+        uid, cid = struct.unpack(">QI", response['value'])
+        print "DCP Event: Collection {} from manifest {} deleted at "\
+              "seqno: {}".format(cid, uid, response['seqno'])
+        manifest['uid'] = uid
+        collections = []
+        for e in manifest['scopes']:
+            for c in e['collections']:
+                if c['uid'] != cid:
+                    collections.append(e)
+            e['collections'] = collections
+
+    elif response['event'] == EVENT_CREATE_SCOPE:
+        uid, sid = struct.unpack(">QI", response['value'])
+        print "DCP Event: Scope {} id:{} from manifest {} created at "\
+              "seqno: {}".format(response['key'],
+                                 sid,
+                                 uid,
+                                 response['seqno'])
+
+        # Record the scope
+        manifest['uid'] = uid
+        manifest['scopes'].append({'uid':sid,
+                                   'name':response['key'],
+                                   'collections':[]})
+
+    elif response['event'] == EVENT_DELETE_SCOPE:
+        # We can receive delete scope without a corresponding create, this
+        # will happen when only the tombstone of a scope remains
+        uid, sid = struct.unpack(">QI", response['value'])
+        print "DCP Event: Scope id:{} from manifest {} deleted at "\
+              "seqno: {}".format(sid, uid, response['seqno'])
+        manifest['uid'] = uid
+        scopes = []
+        for e in manifest['scopes']:
+            if e['uid'] != sid:
+                scopes.append(e)
+        manifest['scopes'] = scopes
     else:
         print "Unknown DCP Event:", response['event']
-
+    return manifest
 
 def handleMutation(response):
     vb = response['vbucket']
@@ -82,6 +150,7 @@ def handleMutation(response):
 def process_dcp_traffic(streams, args):
     key_count = 0
     active_streams = len(streams)
+    manifest = {'scopes':[],'uid':0}
     while active_streams > 0:
         print "Received", str(key_count), "keys"
         for vb in streams:
@@ -110,7 +179,7 @@ def process_dcp_traffic(streams, args):
                     elif response['opcode'] == CMD_SNAPSHOT_MARKER:
                         print "Received snapshot marker from vbucket", vb['id']
                     elif response['opcode'] == CMD_SYSTEM_EVENT:
-                        handleSystemEvent(response)
+                        handleSystemEvent(response, manifest)
                     elif response['opcode'] == CMD_STREAM_END:
                         print "Received stream end. Stream complete."
                         vb['complete'] = True
@@ -138,6 +207,10 @@ def process_dcp_traffic(streams, args):
                         if args.stream_req_info:
                             print 'Stream to vbucket(s)', str(vb['id']), 'closed'
     print "Ended with", key_count, "keys"
+
+    if args.collections:
+        print "The following manifest state was created from the system events"
+        print json.dumps(manifest, sort_keys=True, indent=2)
 
 
 def initiate_connection(args):
