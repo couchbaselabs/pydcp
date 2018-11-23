@@ -133,6 +133,7 @@ def handleSystemEvent(response, manifest):
 def handleMutation(response):
     vb = response['vbucket']
     seqno = response['by_seqno']
+    action = response['opcode']
     output_string = ""
     if args.keys:
         output_string += "KEY:" + response['key'] + " from collection:" + str(response['collection_id']) + ", vb:" + str(vb) + " "
@@ -144,6 +145,7 @@ def handleMutation(response):
         else:
             output_string += " XATTRS: - "
     if output_string != "":
+        output_string = str(DCP_Opcode_Dictionary[action]) + " -> " + output_string
         print seqno, output_string
 
 
@@ -173,6 +175,11 @@ def process_dcp_traffic(streams, args):
                         vb['timed-out'] = args.retry_limit
                     elif response['opcode'] == CMD_DELETION:
                         handleMutation(response)  # Printing untested with deletion, based on mutation
+                        if args.failover_logging:
+                            dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
+                        key_count += 1
+                    elif response['opcode'] == CMD_EXPIRATION:
+                        handleMutation(response)  # Printing untested with expiration, based on mutation
                         if args.failover_logging:
                             dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
@@ -264,6 +271,11 @@ def initiate_connection(args):
         response = dcp_client.general_control("force_value_compression", "true")
         assert response['status'] == SUCCESS
         print "Forcing compression on connection"
+
+    if args.enable_expiry:
+        response = dcp_client.general_control("enable_expiry_opcode", "true")
+        assert response['status'] == SUCCESS
+        print "Enabled Expiry Output"
 
     return dcp_client
 
@@ -437,6 +449,8 @@ def parseArguments():
     contain the failover log and sequence number", required=False, action='store_true')
     parser.add_argument("--log-path", help="Set the file path to use for the log files", default=None, required=False)
     parser.add_argument("--keep-logs", "-l", help="Retain & use current stored log files", required=False,
+                        action="store_true")
+    parser.add_argument("--enable-expiry", help="Trigger DCP control to allow expiry opcode messages", required=False,
                         action="store_true")
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
