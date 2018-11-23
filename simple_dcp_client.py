@@ -63,10 +63,11 @@ def handleSystemEvent(response, manifest):
                                                  sid,
                                                  uid,
                                                  response['seqno'])
-            manifest['uid'] = uid
+            manifest['uid'] = format(uid, 'x')
             for e in manifest['scopes']:
-                if e['uid'] == sid:
-                    e['collections'].append({'name':response['key'], 'uid':cid});
+                if e['uid'] == format(sid, 'x'):
+                    e['collections'].append({'name':response['key'],
+                                             'uid':format(cid, 'x')});
 
         elif response['version'] == 1:
             uid, sid, cid, ttl = struct.unpack(">QIII", response['value'])
@@ -77,11 +78,11 @@ def handleSystemEvent(response, manifest):
                                                             ttl,
                                                             uid,
                                                             response['seqno'])
-            manifest['uid'] = uid
+            manifest['uid'] = format(uid, 'x')
             for e in manifest['scopes']:
-                if e['uid'] == sid:
+                if e['uid'] == format(sid, 'x'):
                     e['collections'].append({'name':response['key'],
-                                             'uid':cid,
+                                             'uid': format(cid, 'x'),
                                              'max_ttl':max_ttl});
         else:
             print "Unknown DCP Event version:", response['version']
@@ -92,12 +93,12 @@ def handleSystemEvent(response, manifest):
         uid, cid = struct.unpack(">QI", response['value'])
         print "DCP Event: Collection {} from manifest {} deleted at "\
               "seqno: {}".format(cid, uid, response['seqno'])
-        manifest['uid'] = uid
+        manifest['uid'] = format(uid, 'x')
         collections = []
         for e in manifest['scopes']:
             for c in e['collections']:
-                if c['uid'] != cid:
-                    collections.append(e)
+                if c['uid'] != format(cid, 'x'):
+                    collections.append(c)
             e['collections'] = collections
 
     elif response['event'] == EVENT_CREATE_SCOPE:
@@ -109,8 +110,8 @@ def handleSystemEvent(response, manifest):
                                  response['seqno'])
 
         # Record the scope
-        manifest['uid'] = uid
-        manifest['scopes'].append({'uid':sid,
+        manifest['uid'] = format(uid, 'x')
+        manifest['scopes'].append({'uid':format(sid, 'x'),
                                    'name':response['key'],
                                    'collections':[]})
 
@@ -120,10 +121,10 @@ def handleSystemEvent(response, manifest):
         uid, sid = struct.unpack(">QI", response['value'])
         print "DCP Event: Scope id:{} from manifest {} deleted at "\
               "seqno: {}".format(sid, uid, response['seqno'])
-        manifest['uid'] = uid
+        manifest['uid'] = format(uid, 'x')
         scopes = []
         for e in manifest['scopes']:
-            if e['uid'] != sid:
+            if e['uid'] != format(sid, 'x'):
                 scopes.append(e)
         manifest['scopes'] = scopes
     else:
@@ -148,13 +149,25 @@ def handleMutation(response):
         output_string = str(DCP_Opcode_Dictionary[action]) + " -> " + output_string
         print seqno, output_string
 
+def handleMarker(response):
+    print "Snapshot Marker vb:{}, "\
+          "start:{}, end:{}, flag:{}".format(response['vbucket'],
+                                             response['snap_start_seqno'],
+                                             response['snap_end_seqno'],
+                                             response['flag'])
+    return int(response['snap_start_seqno']),int(response['snap_end_seqno'])
+
+def checkSnapshot(se, current):
+    if se == current:
+        print "Snapshot complete end:{}".format(se)
+
 
 def process_dcp_traffic(streams, args):
     key_count = 0
     active_streams = len(streams)
-    manifest = {'scopes':[],'uid':0}
+
     while active_streams > 0:
-        print "Received", str(key_count), "keys"
+
         for vb in streams:
             stream = vb['stream']
             if not vb['complete']:
@@ -168,25 +181,44 @@ def process_dcp_traffic(streams, args):
                     elif response['opcode'] == CMD_STREAM_REQ:
                         print "wasn't expecting a stream request"
                     elif response['opcode'] == CMD_MUTATION:
+
                         handleMutation(response)
                         if args.failover_logging:
-                            dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
+                            dcp_log_data.upsert_sequence_no(response['vbucket'],
+                                                            response['by_seqno'])
+
                         key_count += 1
                         vb['timed-out'] = args.retry_limit
+                        print "Received", str(key_count), "keys"
+
+                        checkSnapshot(vb['snap_end'], response['by_seqno'])
                     elif response['opcode'] == CMD_DELETION:
                         handleMutation(response)  # Printing untested with deletion, based on mutation
                         if args.failover_logging:
-                            dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
+                            dcp_log_data.upsert_sequence_no(response['vbucket'],
+                                                            response['by_seqno'])
+
                         key_count += 1
+
+                        print "Received", str(key_count), "keys"
+
+                        checkSnapshot(vb['snap_end'], response['by_seqno'])
                     elif response['opcode'] == CMD_EXPIRATION:
                         handleMutation(response)  # Printing untested with expiration, based on mutation
                         if args.failover_logging:
                             dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
                         key_count += 1
+                        print "Received", str(key_count), "keys"
+
+                        checkSnapshot(vb['snap_end'], response['by_seqno'])
                     elif response['opcode'] == CMD_SNAPSHOT_MARKER:
-                        print "Received snapshot marker from vbucket", vb['id']
+                        ss,se = handleMarker(response)
+                        vb['snap_start'] = ss
+                        vb['snap_end'] = se
                     elif response['opcode'] == CMD_SYSTEM_EVENT:
-                        handleSystemEvent(response, manifest)
+                        vb['manifest'] = handleSystemEvent(response,
+                                                           vb['manifest'])
+                        checkSnapshot(vb['snap_end'], response['seqno'])
                     elif response['opcode'] == CMD_STREAM_END:
                         print "Received stream end. Stream complete."
                         vb['complete'] = True
@@ -215,9 +247,12 @@ def process_dcp_traffic(streams, args):
                             print 'Stream to vbucket(s)', str(vb['id']), 'closed'
     print "Ended with", key_count, "keys"
 
+    # Dump each VB manifest if collections were enabled
     if args.collections:
-        print "The following manifest state was created from the system events"
-        print json.dumps(manifest, sort_keys=True, indent=2)
+        for vb in streams:
+            print "vb:{} The following manifest state was created from the "\
+                  "system events".format(vb['id'])
+            print json.dumps(vb['manifest'], sort_keys=True, indent=2)
 
 
 def initiate_connection(args):
@@ -314,7 +349,10 @@ def add_streams(args):
                          "keys_recvd": 0,
                          "timed-out": vb_retry,  # Counts the amount of times that vb_stream gets timed out
                          "stream_open": True,  # Details whether a vb stream is open to avoid repeatedly closing
-                         "stream": stream
+                         "stream": stream,
+                         "manifest": {'scopes':[], 'uid':0},
+                         "snap_start": 0,
+                         "snap_end": 0
                          }
             streams.append(vb_stream)
         else:
