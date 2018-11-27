@@ -524,6 +524,9 @@ def parseArguments():
     if parsed_args.retry_limit and not parsed_args.timeout:
         print 'Note: It is recommended that you set a shorter vbucket timeout (via -t or --timeout) \
         when using --retry-limit'
+    if parsed_args.enable_expiry and not parsed_args.delete_times:
+        parsed_args.delete_times = True
+        print "Note: Automatically turning on delete times due to requested usage of expiry output"
     return parsed_args
 
 
