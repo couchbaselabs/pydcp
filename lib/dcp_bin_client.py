@@ -688,7 +688,8 @@ class StreamRequest(Operation):
                 struct.unpack(">QIB", body[0:13])
             key = body[header_len:header_len+keylen]
             value = body[header_len+keylen:]
-            response = { 'opcode' : opcode,
+            response = { 'vbucket': status,
+                         'opcode' : opcode,
                          'seqno' : seqno,
                          'event' : event,
                          'key' : key,

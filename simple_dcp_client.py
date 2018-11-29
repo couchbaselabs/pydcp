@@ -57,8 +57,9 @@ def handleSystemEvent(response, manifest):
     if response['event'] == EVENT_CREATE_COLLECTION:
         if response['version'] == 0:
             uid, sid, cid = struct.unpack(">QII", response['value'])
-            print "DCP Event: Collection {} id:{} in scope:{} from manifest {}"\
-                  " created at seqno: {}".format(response['key'],
+            print "DCP Event: vb:{} Collection {} id:{} in scope:{} from manifest {}"\
+                  " created at seqno: {}".format(response['vbucket'],
+                                                 response['key'],
                                                  cid,
                                                  sid,
                                                  uid,
@@ -71,8 +72,9 @@ def handleSystemEvent(response, manifest):
 
         elif response['version'] == 1:
             uid, sid, cid, ttl = struct.unpack(">QIII", response['value'])
-            print "DCP Event: Collection {} id:{} in scope:{} with ttl:{} from "\
-                  "manifest {} created at seqno: {}".format(response['key'],
+            print "DCP Event: vb:{} Collection {} id:{} in scope:{} with ttl:{} from "\
+                  "manifest {} created at seqno: {}".format(response['vbucket'],
+                                                            response['key'],
                                                             cid,
                                                             sid,
                                                             ttl,
@@ -91,8 +93,8 @@ def handleSystemEvent(response, manifest):
         # We can receive delete collection without a corresponding create, this
         # will happen when only the tombstone of a collection remains
         uid, cid = struct.unpack(">QI", response['value'])
-        print "DCP Event: Collection {} from manifest {} deleted at "\
-              "seqno: {}".format(cid, uid, response['seqno'])
+        print "DCP Event: vb:{} Collection {} from manifest {} deleted at "\
+              "seqno: {}".format(response['vbucket'], cid, uid, response['seqno'])
         manifest['uid'] = format(uid, 'x')
         collections = []
         for e in manifest['scopes']:
@@ -103,8 +105,9 @@ def handleSystemEvent(response, manifest):
 
     elif response['event'] == EVENT_CREATE_SCOPE:
         uid, sid = struct.unpack(">QI", response['value'])
-        print "DCP Event: Scope {} id:{} from manifest {} created at "\
-              "seqno: {}".format(response['key'],
+        print "DCP Event: vb:{} Scope {} id:{} from manifest {} created at "\
+              "seqno: {}".format(response['vbucket'],
+                                 response['key'],
                                  sid,
                                  uid,
                                  response['seqno'])
@@ -119,8 +122,8 @@ def handleSystemEvent(response, manifest):
         # We can receive delete scope without a corresponding create, this
         # will happen when only the tombstone of a scope remains
         uid, sid = struct.unpack(">QI", response['value'])
-        print "DCP Event: Scope id:{} from manifest {} deleted at "\
-              "seqno: {}".format(sid, uid, response['seqno'])
+        print "DCP Event: vb:{} Scope id:{} from manifest {} deleted at "\
+              "seqno: {}".format(response['vbucket'], sid, uid, response['seqno'])
         manifest['uid'] = format(uid, 'x')
         scopes = []
         for e in manifest['scopes']:
@@ -157,13 +160,13 @@ def handleMarker(response):
                                              response['flag'])
     return int(response['snap_start_seqno']),int(response['snap_end_seqno'])
 
-def checkSnapshot(se, current):
+def checkSnapshot(vb, se, current, stream):
     if se == current:
-        print "Snapshot complete end:{}".format(se)
+        print "Snapshot for vb:{} has completed, end:{}, "\
+              "stream.mutation_count:{}".format(vb, se, stream.mutation_count)
 
 
 def process_dcp_traffic(streams, args):
-    key_count = 0
     active_streams = len(streams)
 
     while active_streams > 0:
@@ -178,56 +181,43 @@ def process_dcp_traffic(streams, args):
                         vb['complete'] = True
                         active_streams -= 1
                         dcp_log_data.push_sequence_no(vb['id'])
-                    elif response['opcode'] == CMD_STREAM_REQ:
-                        print "wasn't expecting a stream request"
-                    elif response['opcode'] == CMD_MUTATION:
+                        continue
 
+                    opcode = response['opcode']
+                    if (opcode == CMD_MUTATION or
+                        opcode == CMD_DELETION or
+                        opcode == CMD_EXPIRATION):
                         handleMutation(response)
                         if args.failover_logging:
                             dcp_log_data.upsert_sequence_no(response['vbucket'],
                                                             response['by_seqno'])
 
-                        key_count += 1
                         vb['timed-out'] = args.retry_limit
-                        print "Received", str(key_count), "keys"
 
-                        checkSnapshot(vb['snap_end'], response['by_seqno'])
-                    elif response['opcode'] == CMD_DELETION:
-                        handleMutation(response)  # Printing untested with deletion, based on mutation
-                        if args.failover_logging:
-                            dcp_log_data.upsert_sequence_no(response['vbucket'],
-                                                            response['by_seqno'])
-
-                        key_count += 1
-
-                        print "Received", str(key_count), "keys"
-
-                        checkSnapshot(vb['snap_end'], response['by_seqno'])
-                    elif response['opcode'] == CMD_EXPIRATION:
-                        handleMutation(response)  # Printing untested with expiration, based on mutation
-                        if args.failover_logging:
-                            dcp_log_data.upsert_sequence_no(response['vbucket'], response['by_seqno'])
-                        key_count += 1
-                        print "Received", str(key_count), "keys"
-
-                        checkSnapshot(vb['snap_end'], response['by_seqno'])
-                    elif response['opcode'] == CMD_SNAPSHOT_MARKER:
-                        ss,se = handleMarker(response)
-                        vb['snap_start'] = ss
-                        vb['snap_end'] = se
-                    elif response['opcode'] == CMD_SYSTEM_EVENT:
+                        checkSnapshot(response['vbucket'],
+                                      vb['snap_end'],
+                                      response['by_seqno'],
+                                      stream)
+                    elif opcode == CMD_SNAPSHOT_MARKER:
+                        vb['snap_start'], vb['snap_end'] = handleMarker(response)
+                    elif opcode == CMD_SYSTEM_EVENT:
                         vb['manifest'] = handleSystemEvent(response,
                                                            vb['manifest'])
-                        checkSnapshot(vb['snap_end'], response['seqno'])
-                    elif response['opcode'] == CMD_STREAM_END:
-                        print "Received stream end. Stream complete."
+                        checkSnapshot(response['vbucket'],
+                                      vb['snap_end'],
+                                      response['seqno'],
+                                      stream)
+                    elif opcode == CMD_STREAM_END:
+                        print "Received stream end. Stream complete with "\
+                              "reason {}.".format(response['flags'])
                         vb['complete'] = True
                         active_streams -= 1
                         dcp_log_data.push_sequence_no(response['vbucket'])
                     else:
-                        print 'Unhandled opcode:', response['opcode']
+                        print "Unexpected and unhandled opcode:{}".format(opcode)
                 else:
                     print 'No response'
+
             if vb['complete']:
                 # Second-tier timeout - after the stream close to allow other vbuckets to execute
                 if vb['timed-out'] > 0:
