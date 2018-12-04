@@ -268,6 +268,10 @@ MAGIC_BYTE = 0x80
 REQ_MAGIC_BYTE = 0x80
 RES_MAGIC_BYTE = 0x81
 
+# ALternative encoding (frame info present)
+ALT_REQ_MAGIC_BYTE = 0x08
+ALT_RES_MAGIC_BYTE = 0x18
+
 # subdoc extras format - path len
 REQ_PKT_SD_EXTRAS= ">HB"
 
@@ -275,6 +279,9 @@ REQ_PKT_SD_EXTRAS= ">HB"
 REQ_PKT_FMT = ">BBHBBHIIQ"
 # magic, opcode, keylen, extralen, datatype, status, bodylen, opaque, cas
 RES_PKT_FMT = ">BBHBBHIIQ"
+# magic, opcode, frameextra, keylen, extralen, datatype, status, bodylen, opaque, cas
+ALT_RES_PKT_FMT = ">BBBBBBHIIQ"
+
 # min recv packet size
 MIN_RECV_PACKET = struct.calcsize(REQ_PKT_FMT)
 # The header sizes don't deviate

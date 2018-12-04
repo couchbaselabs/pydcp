@@ -204,7 +204,7 @@ class DcpClient(MemcachedClient):
                 if self._stream_timeout:
                     return None
 
-                opcode, status, opaque, cas, keylen, extlen, dtype, body = \
+                opcode, status, opaque, cas, keylen, extlen, dtype, body, frameextralen = \
                     self._recvMsg()
 
                 if self._opcode_dump:
@@ -213,7 +213,8 @@ class DcpClient(MemcachedClient):
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
                                                     extlen, dtype, status,
-                                                    cas, body, opaque)
+                                                    cas, body, opaque,
+                                                    frameextralen)
                     return response
 
                 # check if response is for different request
@@ -221,7 +222,8 @@ class DcpClient(MemcachedClient):
                 if cached_op:
                     response = cached_op.formated_response(opcode, keylen,
                                                            extlen, dtype, status,
-                                                           cas, body, opaque)
+                                                           cas, body, opaque,
+                                                           frameextralen)
                     # save for later
                     cached_op.queue.put(response)
 
@@ -366,7 +368,7 @@ class Operation(object):
         self.opaque = opaque or random.Random().randint(0, 2 ** 32)
         self.queue = Queue.Queue()
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
         return {'opcode': opcode,
                 'status': status,
                 'body': body}
@@ -416,7 +418,7 @@ class CloseStream(Operation):
         Operation.__init__(self, opcode,
                            vbucket=vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
         response = {'opcode': opcode,
                     'status': status,
                     'value': body}
@@ -433,7 +435,7 @@ class AddStream(Operation):
                            extras=extras,
                            vbucket=vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque, frameextralen):
         response = {'opcode': opcode,
                     'status': status,
                     'extlen': extlen,
@@ -526,180 +528,164 @@ class StreamRequest(Operation):
             xattrs.append((xattr_key, xattr_value))
         return xattrs
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
-        adjusted_time = None
-        conflict_resolution_mode = 0
-        xattrs = None
+    def format_stream_req(self, response, status, body):
+        response['status'] = status
+        response['failover_log'] = []
+        response['err_msg'] = None
 
-        if opcode == CMD_STREAM_REQ:
+        if status == 0:
+            assert (len(body) % 16) == 0
+            response['failover_log'] = []
 
-            response = {'opcode': opcode,
-                        'status': status,
-                        'failover_log': [],
-                        'err_msg': None}
+            pos = 0
+            bodylen = len(body)
+            while bodylen > pos:
+                vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos + 16])
+                response['failover_log'].append((vb_uuid, seqno))
+                pos += 16
+        elif status == 35:
 
-            if status == 0:
-                assert (len(body) % 16) == 0
-                response['failover_log'] = []
+            seqno = struct.unpack(">II", body)
+            response['by_seqno'] = seqno[0]
+            response['rollback'] = seqno[1]
 
-                pos = 0
-                bodylen = len(body)
-                while bodylen > pos:
-                    vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos + 16])
-                    response['failover_log'].append((vb_uuid, seqno))
-                    pos += 16
-            elif status == 35:
+        else:
+            response['err_msg'] = body
 
-                seqno = struct.unpack(">II", body)
-                response['seqno'] = seqno[0]
-                response['rollback'] = seqno[1]
+        return response
 
-            else:
-                response['err_msg'] = body
+    def format_stream_end(self, response, frameextralen, extlen, body):
+        header_len = 4
+        assert extlen == header_len, "Stream End with incorrect extlen:{}".format(extlen)
+        response['flags'] = struct.unpack(">I", body[frameextralen:frameextralen+4])[0]
+        return response
 
-        elif opcode == CMD_STREAM_END:
-            flags = struct.unpack(">I", body[0:4])[0]
-            response = {'opcode': opcode,
-                        'vbucket': status,
-                        'flags': flags}
+    def format_mutation(self, response, frameextralen, extlen, body):
+        header_len = 31
+        assert extlen == header_len, "Mutation with incorrect extlen:{}".format(extlen)
+        response['by_seqno'],\
+        response['rev_seqno'],\
+        response['flags'],\
+        response['expiration'],\
+        response['lock_time'],\
+        nmeta,\
+        response['nru'] = struct.unpack(">QQIIIHB", body[frameextralen:frameextralen+header_len])
+        return response
 
-        elif opcode == CMD_MUTATION:
-            header_len = 31
-            by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
-                struct.unpack(">QQIIIHB", body[0:header_len])
-            key = body[header_len:header_len+keylen]
-            value = body[header_len+keylen: len(body)- ext_meta_len]
+    def format_deletion(self, response, frameextralen, extlen, body):
+        delete_time = 0
+        nmeta = 0
+        if self.delete_times:
+            header_len = 21
+            assert extlen == header_len, "Deletion with incorrect extlen:{}".format(extlen)
+            unused = 0
+            response['by_seqno'],\
+            response['rev_seqno'],\
+            response['delete_time'],\
+            unused = struct.unpack(">QQIB", body[frameextralen:frameextralen+21])
+        else:
+            header_len = 18
+            assert extlen == header_len, "Deletion with incorrect extlen:{}".format(extlen)
+            unused = 0
+            response['by_seqno'],\
+            response['rev_seqno'],\
+            nmeta = struct.unpack(">QQH", body[frameextralen:frameextralen+18])
+        return response
 
-            if self.collection_filtering:
-                # Decode the CID from key
-                collection_id, key = decodeCollectionID(key)
-            else:
-                # Belongs to default collection
-                # Should really lookup the CID in the Manifest for _default
-                collection_id = 0
-
-            if ext_meta_len > 0:
-                adjusted_time, conflict_resolution_mode = self.parse_extended_meta_data(body[len(body) - ext_meta_len:])
-            if (dtype & DATATYPE_XATTR):
-                total_xattr_len = struct.unpack('>I', value[0:4])[0]
-                xattrs = self.parse_extended_attributes(value[4:], total_xattr_len)
-                value = value[total_xattr_len + 4:]
-
-            response = { 'opcode'     : opcode,
-                         'vbucket'    : status,
-                         'by_seqno'   : by_seqno,
-                         'rev_seqno'  : rev_seqno,
-                         'flags'      : flags,
-                         'expiration' : exp,
-                         'lock_time'  : lock_time,
-                         'nmeta'      : ext_meta_len,
-                         'nru'        : nru,
-                         'key'        : key,
-                         'value'      : value,
-                         'adjusted_time': adjusted_time,
-                         'conflict_resolution_mode': conflict_resolution_mode,
-                         'xattrs'     : xattrs,
-                         'collection_id' : collection_id}
-
-        elif opcode == CMD_DELETION:
-            delete_time = 0
-            ext_meta_len = 0
-            if self.delete_times:
-                header_len = 21
-                by_seqno, rev_seqno, delete_time, unused = \
-                    struct.unpack(">QQIB", body[0:21])
-            else:
-                header_len = 18
-                by_seqno, rev_seqno, ext_meta_len = \
-                    struct.unpack(">QQH", body[0:18])
-
-            key = body[header_len:header_len + keylen]
-
-            if self.collection_filtering:
-                # Decode the CID from key
-                collection_id, key = decodeCollectionID(key)
-            else:
-                # Belongs to default collection
-                # Should really lookup the CID in the Manifest for _default
-                collection_id = 0
-
-            if ext_meta_len > 0:
-                adjusted_time, conflict_resolution_mode = \
-                    self.parse_extended_meta_data(body[len(body)- ext_meta_len:])
-
-            response = { 'opcode'     : opcode,
-                         'vbucket'    : status,
-                         'by_seqno'   : by_seqno,
-                         'rev_seqno'  : rev_seqno,
-                         'key'        : key,
-                         'adjusted_time': adjusted_time,
-                         'conflict_resolution_mode': conflict_resolution_mode,
-                         'delete_time' : delete_time,
-                         'collection_id' : collection_id}
-
-        elif opcode == CMD_EXPIRATION:
-            assert self.delete_times, "Delete times must be enabled to " \
+    def format_expiry(self, response, frameextralen, extlen, body):
+        assert self.delete_times, "Delete times must be enabled to " \
                                       "support expiration"
 
-            header_len = 20
-            by_seqno, rev_seqno, delete_time = \
-                struct.unpack(">QQI", body[0:20])
+        header_len = 20
+        assert extlen == header_len, "Expiry with incorrect extlen:{}".format(extlen)
+        response['by_seqno'],\
+        response['rev_seqno'],\
+        response['delete_time'] = struct.unpack(">QQI", body[frameextralen:frameextralen+20])
+        return response
 
-            key = body[header_len:header_len + keylen]
+    def format_snapshot_marker(self, response, frameextralen, extlen, body):
+        header_len = 20
+        assert extlen == header_len, "Snapshot with incorrect extlen:{}".format(extlen)
 
-            if self.collection_filtering:
+        response['snap_start_seqno'],\
+        response['snap_end_seqno'],\
+        flag = struct.unpack(">QQI", body[frameextralen:frameextralen+20])
+        response['flag'] = {1: 'memory',
+                            2: 'disk',
+                            5: 'memory-checkpoint',
+                            6: 'disk-checkpoint'}[flag]
+
+        return response
+
+
+    def format_system_event(self, response, frameextralen, extlen, body):
+        header_len = 13
+        assert extlen == header_len, "System event with incorrect extlen:{}".format(extlen)
+        response['by_seqno'],\
+        response['event'],\
+        response['version'] = struct.unpack(">QIB", body[frameextralen:frameextralen+13])
+        return response
+
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
+
+        response = {'vbucket': status,
+                    'opcode' : opcode,
+                    'cas' : cas,
+                    'opaque' : opaque}
+
+        if opcode == CMD_STREAM_REQ:
+            response = self.format_stream_req(response, status, body)
+
+        elif opcode == CMD_STREAM_END:
+            response = self.format_stream_end(response, frameextralen, extlen, body)
+
+        elif opcode == CMD_MUTATION:
+            response = self.format_mutation(response, frameextralen, extlen, body)
+
+        elif opcode == CMD_DELETION:
+            response = self.format_deletion(response, frameextralen, extlen, body)
+
+        elif opcode == CMD_EXPIRATION:
+            response = self.format_expiry(response, frameextralen, extlen, body)
+
+        elif opcode == CMD_SNAPSHOT_MARKER:
+            response = self.format_snapshot_marker(response, frameextralen, extlen, body)
+
+        elif opcode == CMD_SYSTEM_EVENT:
+            response = self.format_system_event(response, frameextralen, extlen, body)
+
+        else:
+            assert "Unknown opcode {}".format(opcode)
+
+        streamId = None
+        if frameextralen:
+            tag, streamId = struct.unpack('>BH', body[0:frameextralen])
+            assert tag == 0x22
+
+        key = body[extlen+frameextralen:extlen+frameextralen+keylen]
+
+        value = body[extlen+frameextralen+keylen:]
+
+        xattrs = None
+        if (dtype & DATATYPE_XATTR):
+            total_xattr_len = struct.unpack('>I', value[0:4])[0]
+            xattrs = self.parse_extended_attributes(value[4:], total_xattr_len)
+            value = value[total_xattr_len + 4:]
+
+        response['xattrs'] = xattrs
+
+        if opcode in (CMD_EXPIRATION, CMD_DELETION, CMD_MUTATION):
+            if self.collection_filtering and keylen:
                 # Decode the CID from key
-                collection_id, key = decodeCollectionID(key)
+                response['collection_id'], key = decodeCollectionID(key)
             else:
                 # Belongs to default collection
                 # Should really lookup the CID in the Manifest for _default
-                collection_id = 0
+                response['collection_id'] = 0
 
-            response = { 'opcode'     : opcode,
-                         'vbucket'    : status,
-                         'by_seqno'   : by_seqno,
-                         'rev_seqno'  : rev_seqno,
-                         'key'        : key,
-                         'delete_time' : delete_time,
-                         'collection_id' : collection_id}
-
-        elif opcode == CMD_SNAPSHOT_MARKER:
-
-            assert len(body) == 20
-            snap_start, snap_end, flag = \
-                struct.unpack(">QQI", body)
-            assert flag in (1, 2, 5, 6), "Invalid snapshot flag: %s" % flag
-            assert snap_start <= snap_end, "Snapshot start: %s > end: %s" % \
-                                           (snap_start, snap_end)
-            flag = {1: 'memory',
-                    2: 'disk',
-                    5: 'memory-checkpoint',
-                    6: 'disk-checkpoint'}[flag]
-
-            response = {'opcode': opcode,
-                        'vbucket': status,
-                        'snap_start_seqno': snap_start,
-                        'snap_end_seqno': snap_end,
-                        'flag': flag}
-
-        elif opcode == CMD_SYSTEM_EVENT:
-            header_len = 13
-            seqno, event, version = \
-                struct.unpack(">QIB", body[0:13])
-            key = body[header_len:header_len+keylen]
-            value = body[header_len+keylen:]
-            response = { 'vbucket': status,
-                         'opcode' : opcode,
-                         'seqno' : seqno,
-                         'event' : event,
-                         'key' : key,
-                         'value' : value,
-                         'version' : version}
-        else:
-            response = {'err_msg': "(Stream Request) Unknown response",
-                        'opcode': opcode,
-                        'status': -1}
-
+        response['key'] = key
+        response['value'] = value
+        response['streamId'] = streamId
         return response
 
 
@@ -711,7 +697,7 @@ class GetFailoverLog(Operation):
         Operation.__init__(self, opcode,
                            vbucket=vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
 
         failover_log = []
 
@@ -739,7 +725,7 @@ class FlowControl(Operation):
                            key="connection_buffer_size",
                            value=str(buffer_size))
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
         response = {'opcode': opcode,
                     'status': status,
                     'body': body}
@@ -754,7 +740,7 @@ class GeneralControl(Operation):
                            key,
                            value)
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
         response = {'opcode': opcode,
                     'status': status,
                     'body': body}
@@ -771,7 +757,7 @@ class Ack(Operation):
         Operation.__init__(self, opcode,
                            extras=extras)
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
         response = {'opcode': opcode,
                     'status': status,
                     'error': body}
@@ -784,7 +770,7 @@ class Quit(Operation):
         opcode = CMD_QUIT
         Operation.__init__(self, opcode)
 
-    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
         response = {'opcode': opcode,
                     'status': status}
         return response
