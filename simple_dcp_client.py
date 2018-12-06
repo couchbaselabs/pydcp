@@ -57,13 +57,14 @@ def handleSystemEvent(response, manifest):
     if response['event'] == EVENT_CREATE_COLLECTION:
         if response['version'] == 0:
             uid, sid, cid = struct.unpack(">QII", response['value'])
-            print "DCP Event: vb:{} Collection {} id:{} in scope:{} from manifest {}"\
-                  " created at seqno: {}".format(response['vbucket'],
+            print "DCP Event: vb:{}, sid:{}, Collection \"{}\", id:{} in scope:{} from manifest:{}"\
+                  " CREATED at seqno:{}".format(response['vbucket'],
+                                                 response['streamId'],
                                                  response['key'],
                                                  cid,
                                                  sid,
                                                  uid,
-                                                 response['seqno'])
+                                                 response['by_seqno'])
             manifest['uid'] = format(uid, 'x')
             for e in manifest['scopes']:
                 if e['uid'] == format(sid, 'x'):
@@ -72,14 +73,15 @@ def handleSystemEvent(response, manifest):
 
         elif response['version'] == 1:
             uid, sid, cid, ttl = struct.unpack(">QIII", response['value'])
-            print "DCP Event: vb:{} Collection {} id:{} in scope:{} with ttl:{} from "\
-                  "manifest {} created at seqno: {}".format(response['vbucket'],
+            print "DCP Event: vb:{}, sid:{}, Collection \"{}\", id:{} in scope:{} with ttl:{} from "\
+                  "manifest:{} CREATED at seqno:{}".format(response['vbucket'],
+                                                 response['streamId'],
                                                             response['key'],
                                                             cid,
                                                             sid,
                                                             ttl,
                                                             uid,
-                                                            response['seqno'])
+                                                            response['by_seqno'])
             manifest['uid'] = format(uid, 'x')
             for e in manifest['scopes']:
                 if e['uid'] == format(sid, 'x'):
@@ -93,8 +95,8 @@ def handleSystemEvent(response, manifest):
         # We can receive delete collection without a corresponding create, this
         # will happen when only the tombstone of a collection remains
         uid, cid = struct.unpack(">QI", response['value'])
-        print "DCP Event: vb:{} Collection {} from manifest {} deleted at "\
-              "seqno: {}".format(response['vbucket'], cid, uid, response['seqno'])
+        print "DCP Event: vb:{}, sid:{}, Collection id:{}, from manifest:{} DROPPED at "\
+              "seqno:{}".format(response['vbucket'], response['streamId'], cid, uid, response['by_seqno'])
         manifest['uid'] = format(uid, 'x')
         collections = []
         for e in manifest['scopes']:
@@ -105,12 +107,13 @@ def handleSystemEvent(response, manifest):
 
     elif response['event'] == EVENT_CREATE_SCOPE:
         uid, sid = struct.unpack(">QI", response['value'])
-        print "DCP Event: vb:{} Scope {} id:{} from manifest {} created at "\
-              "seqno: {}".format(response['vbucket'],
+        print "DCP Event: vb:{}, sid:{}, Scope \"{}\" id:{}, from manifest:{} CREATED at "\
+              "seqno:{}".format(response['vbucket'],
+                response['streamId'],
                                  response['key'],
                                  sid,
                                  uid,
-                                 response['seqno'])
+                                 response['by_seqno'])
 
         # Record the scope
         manifest['uid'] = format(uid, 'x')
@@ -122,8 +125,8 @@ def handleSystemEvent(response, manifest):
         # We can receive delete scope without a corresponding create, this
         # will happen when only the tombstone of a scope remains
         uid, sid = struct.unpack(">QI", response['value'])
-        print "DCP Event: vb:{} Scope id:{} from manifest {} deleted at "\
-              "seqno: {}".format(response['vbucket'], sid, uid, response['seqno'])
+        print "DCP Event: vb:{}, sid:{}, Scope id:{}, from manifest:{} DROPPED at "\
+              "seqno:{}".format(response['vbucket'], response['streamId'], sid, uid, response['seqno'])
         manifest['uid'] = format(uid, 'x')
         scopes = []
         for e in manifest['scopes']:
@@ -138,9 +141,10 @@ def handleMutation(response):
     vb = response['vbucket']
     seqno = response['by_seqno']
     action = response['opcode']
+    sid = response['streamId']
     output_string = ""
     if args.keys:
-        output_string += "KEY:" + response['key'] + " from collection:" + str(response['collection_id']) + ", vb:" + str(vb) + " "
+        output_string += "KEY:" + response['key'] + " from collection:" + str(response['collection_id']) + ", vb:" + str(vb) + " sid:" + str(sid) + " "
     if args.docs:
         output_string += "BODY:" + response['value']
     if args.xattrs:
@@ -153,8 +157,9 @@ def handleMutation(response):
         print seqno, output_string
 
 def handleMarker(response):
-    print "Snapshot Marker vb:{}, "\
+    print "Snapshot Marker vb:{}, sid:{}, "\
           "start:{}, end:{}, flag:{}".format(response['vbucket'],
+                                             response['streamId'],
                                              response['snap_start_seqno'],
                                              response['snap_end_seqno'],
                                              response['flag'])
@@ -205,7 +210,7 @@ def process_dcp_traffic(streams, args):
                                                            vb['manifest'])
                         checkSnapshot(response['vbucket'],
                                       vb['snap_end'],
-                                      response['seqno'],
+                                      response['by_seqno'],
                                       stream)
                     elif opcode == CMD_STREAM_END:
                         print "Received stream end. Stream complete with "\
@@ -235,7 +240,6 @@ def process_dcp_traffic(streams, args):
                         vb['stream_open'] = False
                         if args.stream_req_info:
                             print 'Stream to vbucket(s)', str(vb['id']), 'closed'
-    print "Ended with", key_count, "keys"
 
     # Dump each VB manifest if collections were enabled
     if args.collections:
