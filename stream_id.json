@@ -1,0 +1,7 @@
+{
+    "streams":[
+        {"collections" : ["0"], "sid":2},
+        {"collections" : ["9"], "sid":3},
+        {"scope" : ["8"], "sid":4}
+    ]
+}

@@ -8,12 +8,12 @@ import sys
 
 from dcp_data_persist import LogData
 from lib.dcp_bin_client import DcpClient
-from lib.mc_bin_client import MemcachedError
+from lib.mc_bin_client import MemcachedError, error_to_str
 from lib.memcacheConstants import *
 
 
 def check_for_features(dcp_client, xattrs=False, collections=False, compression=False):
-    features = []
+    features = [HELO_XERROR]
     if xattrs:
         features.append(HELO_XATTR)
     if collections:
@@ -48,7 +48,7 @@ def handle_stream_create_response(dcpStream, args):
         sys.exit(1)
 
     else:
-        print "Unhandled Stream Create Response", dcpStream.status
+        print "Unhandled Stream Create Response {} {}".format(dcpStream.status, error_to_str(dcpStream.status))
         sys.exit(1)
 
 
@@ -306,6 +306,11 @@ def initiate_connection(args):
         assert response['status'] == SUCCESS
         print "Enabled Expiry Output"
 
+    if args.enable_stream_id:
+        response = dcp_client.general_control("enable_stream_id", "true")
+        assert response['status'] == SUCCESS
+        print "Enabled Stream-ID"
+
     return dcp_client
 
 
@@ -316,42 +321,57 @@ def add_streams(args):
     vb_uuid_list = args.uuid
     vb_retry = args.retry_limit
     filter_file = args.filter
-    filter_json = ''
+    filter_json = []
     stream_collections = args.collections
     streams = []
 
+    # Filter is a file containing JSON, it can either be a single DCP
+    # stream-request value, or an array of many values. Use of many values
+    # is intended to be used in conjunction with enable_stream_id and sid
     if stream_collections and filter_file != None:
         filter_file = open(args.filter, "r")
-        filter_json = filter_file.read()
-        print "DCP Open filter: {}".format(filter_json)
+        jsonData = filter_file.read()
+        parsed = json.loads(jsonData)
 
-    for index in xrange(0, len(vb_list)):
-        if args.stream_req_info:
-            print 'Stream to vbucket', vb_list[index], 'on node' , get_node_of_dcp_client_connection(vb_list[index]), \
-                'with seq no', start_seq_no_list[index], 'and uuid', vb_uuid_list[index]
-        vb = vb_list[index]
-        stream = select_dcp_client(vb).stream_req(vbucket=vb,
-                                                  takeover=0,
-                                                  start_seqno=int(start_seq_no_list[index]),
-                                                  end_seqno=end_seq_no,
-                                                  vb_uuid=int(vb_uuid_list[index]),
-                                                  json=filter_json)
-        handle_response = handle_stream_create_response(stream, args)
-        if handle_response is None:
-            vb_stream = {"id": vb_list[index],
-                         "complete": False,
-                         "keys_recvd": 0,
-                         "timed-out": vb_retry,  # Counts the amount of times that vb_stream gets timed out
-                         "stream_open": True,  # Details whether a vb stream is open to avoid repeatedly closing
-                         "stream": stream,
-                         "manifest": {'scopes':[], 'uid':0},
-                         "snap_start": 0,
-                         "snap_end": 0
-                         }
-            streams.append(vb_stream)
+        # Is this an array or singular filter?
+        if 'streams' in parsed:
+            for f in parsed['streams']:
+                filter_json.append(json.dumps(f))
         else:
-            for vb_stream in handle_response:
+            # Assume entire document is the filter
+            filter_json.append(jsonData)
+        print "DCP Open filter: {}".format(filter_json)
+    else:
+        filter_json.append('')
+
+    for f in filter_json:
+        for index in xrange(0, len(vb_list)):
+            if args.stream_req_info:
+                print 'Stream to vbucket', vb_list[index], 'on node' , get_node_of_dcp_client_connection(vb_list[index]), \
+                    'with seq no', start_seq_no_list[index], 'and uuid', vb_uuid_list[index]
+            vb = vb_list[index]
+            stream = select_dcp_client(vb).stream_req(vbucket=vb,
+                                                      takeover=0,
+                                                      start_seqno=int(start_seq_no_list[index]),
+                                                      end_seqno=end_seq_no,
+                                                      vb_uuid=int(vb_uuid_list[index]),
+                                                      json=f)
+            handle_response = handle_stream_create_response(stream, args)
+            if handle_response is None:
+                vb_stream = {"id": vb_list[index],
+                             "complete": False,
+                             "keys_recvd": 0,
+                             "timed-out": vb_retry,  # Counts the amount of times that vb_stream gets timed out
+                             "stream_open": True,  # Details whether a vb stream is open to avoid repeatedly closing
+                             "stream": stream,
+                             "manifest": {'scopes':[], 'uid':0},
+                             "snap_start": 0,
+                             "snap_end": 0
+                             }
                 streams.append(vb_stream)
+            else:
+                for vb_stream in handle_response:
+                    streams.append(vb_stream)
     return streams
 
 
@@ -483,6 +503,8 @@ def parseArguments():
     parser.add_argument("--keep-logs", "-l", help="Retain & use current stored log files", required=False,
                         action="store_true")
     parser.add_argument("--enable-expiry", help="Trigger DCP control to allow expiry opcode messages", required=False,
+                        action="store_true")
+    parser.add_argument("--enable-stream-id", help="Turn on the stream-ID feature (will require use of -f)", required=False,
                         action="store_true")
     parser.add_argument("-u", "--user", help="User", required=True)
     parser.add_argument("-p", "--password", help="Password", required=True)
