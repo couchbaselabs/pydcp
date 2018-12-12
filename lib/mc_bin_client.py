@@ -826,3 +826,5 @@ def error_to_str(errno):
         return "Invalid combinations of commands"
     elif errno == memcacheConstants.ERR_SUBDOC_MULTI_PATH_FAILURE:
         return "Specified key was successfully found, but one or more path operations failed"
+    elif errno == 0x8d:
+        return "Invalid use of stream-ID or no stream-ID when required"
