@@ -539,7 +539,7 @@ class MemcachedClient(object):
         done = False
         rv = {}
         while not done:
-            cmd, opaque, cas, klen, extralen, data = self._handleKeyedResponse(None)
+            cmd, opaque, cas, klen, extralen, data, frameextralen = self._handleKeyedResponse(None)
             if klen:
                 rv[data[0:klen]] = data[klen:]
             else:
