@@ -94,9 +94,9 @@ def handleSystemEvent(response, manifest):
     elif response['event'] == EVENT_DELETE_COLLECTION:
         # We can receive delete collection without a corresponding create, this
         # will happen when only the tombstone of a collection remains
-        uid, cid = struct.unpack(">QI", response['value'])
-        print "DCP Event: vb:{}, sid:{}, Collection id:{}, from manifest:{} DROPPED at "\
-              "seqno:{}".format(response['vbucket'], response['streamId'], cid, uid, response['by_seqno'])
+        uid, sid, cid = struct.unpack(">QII", response['value'])
+        print "DCP Event: vb:{}, sid:{}, Collection id:{} in scope:{} , from manifest:{} DROPPED at "\
+              "seqno:{}".format(response['vbucket'], response['streamId'], cid, sid, uid, response['by_seqno'])
         manifest['uid'] = format(uid, 'x')
         collections = []
         for e in manifest['scopes']:
@@ -364,10 +364,16 @@ def add_streams(args):
                              "timed-out": vb_retry,  # Counts the amount of times that vb_stream gets timed out
                              "stream_open": True,  # Details whether a vb stream is open to avoid repeatedly closing
                              "stream": stream,
-                             "manifest": {'scopes':[], 'uid':0},
+                             # Set the manifest so we assume _default scope and collection exist
+                             # KV won't replicate explicit create events for these items
+                             "manifest":
+                                {'scopes':[
+                                    {'uid':"0", 'name':'_default', 'collections':[
+                                       {'uid':"0", 'name':'_default'}]}], 'uid':0},
                              "snap_start": 0,
                              "snap_end": 0
                              }
+
                 streams.append(vb_stream)
             else:
                 for vb_stream in handle_response:
