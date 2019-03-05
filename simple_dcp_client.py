@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import sys
+import uuid
 
 from dcp_data_persist import LogData
 from lib.dcp_bin_client import DcpClient
@@ -126,7 +127,7 @@ def handleSystemEvent(response, manifest):
         # will happen when only the tombstone of a scope remains
         uid, sid = struct.unpack(">QI", response['value'])
         print "DCP Event: vb:{}, sid:{}, Scope id:{}, from manifest:{} DROPPED at "\
-              "seqno:{}".format(response['vbucket'], response['streamId'], sid, uid, response['seqno'])
+              "seqno:{}".format(response['vbucket'], response['streamId'], sid, uid, response['by_seqno'])
         manifest['uid'] = format(uid, 'x')
         scopes = []
         for e in manifest['scopes']:
@@ -276,7 +277,8 @@ def initiate_connection(args):
     dcp_client.bucket_select(bucket)
     print "Successfully AUTHed to", bucket
 
-    response = dcp_client.open_producer("pydcp stream",
+    name = "simple_dcp_client " + str(uuid.uuid4())
+    response = dcp_client.open_producer(name,
                                         xattr=stream_xattrs,
                                         delete_times=include_delete_times,
                                         collections=stream_collections)
