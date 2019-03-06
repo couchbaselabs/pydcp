@@ -58,24 +58,30 @@ def handleSystemEvent(response, manifest):
     if response['event'] == EVENT_CREATE_COLLECTION:
         if response['version'] == 0:
             uid, sid, cid = struct.unpack(">QII", response['value'])
-            print "DCP Event: vb:{}, sid:{}, Collection \"{}\", id:{} in scope:{} from manifest:{}"\
-                  " CREATED at seqno:{}".format(response['vbucket'],
+            uid = format(uid, 'x')
+            sid = format(sid, 'x')
+            cid = format(cid, 'x')
+            print "DCP Event: vb:{}, sid:{}, what:CollectionCREATED, name:\"{}\", id:{}, scope:{}, manifest:{},"\
+                  " seqno:{}".format(response['vbucket'],
                                                  response['streamId'],
                                                  response['key'],
                                                  cid,
                                                  sid,
                                                  uid,
                                                  response['by_seqno'])
-            manifest['uid'] = format(uid, 'x')
+            manifest['uid'] = uid
             for e in manifest['scopes']:
-                if e['uid'] == format(sid, 'x'):
+                if e['uid'] == sid:
                     e['collections'].append({'name':response['key'],
-                                             'uid':format(cid, 'x')});
+                                             'uid':cid});
 
         elif response['version'] == 1:
             uid, sid, cid, ttl = struct.unpack(">QIII", response['value'])
-            print "DCP Event: vb:{}, sid:{}, Collection \"{}\", id:{} in scope:{} with ttl:{} from "\
-                  "manifest:{} CREATED at seqno:{}".format(response['vbucket'],
+            uid = format(uid, 'x')
+            sid = format(sid, 'x')
+            cid = format(cid, 'x')
+            print "DCP Event: vb:{}, sid:{}, what:CollectionCREATED, name:\"{}\", id:{}, scope:{}, ttl:{}, "\
+                  "manifest:{}, seqno:{}".format(response['vbucket'],
                                                  response['streamId'],
                                                             response['key'],
                                                             cid,
@@ -83,11 +89,11 @@ def handleSystemEvent(response, manifest):
                                                             ttl,
                                                             uid,
                                                             response['by_seqno'])
-            manifest['uid'] = format(uid, 'x')
+            manifest['uid'] = uid
             for e in manifest['scopes']:
-                if e['uid'] == format(sid, 'x'):
+                if e['uid'] == sid:
                     e['collections'].append({'name':response['key'],
-                                             'uid': format(cid, 'x'),
+                                             'uid': cid,
                                              'max_ttl':max_ttl});
         else:
             print "Unknown DCP Event version:", response['version']
@@ -96,19 +102,28 @@ def handleSystemEvent(response, manifest):
         # We can receive delete collection without a corresponding create, this
         # will happen when only the tombstone of a collection remains
         uid, sid, cid = struct.unpack(">QII", response['value'])
-        print "DCP Event: vb:{}, sid:{}, Collection id:{} in scope:{} , from manifest:{} DROPPED at "\
+        uid = format(uid, 'x')
+        sid = format(sid, 'x')
+        cid = format(cid, 'x')
+        print "DCP Event: vb:{}, sid:{}, what:CollectionDROPPED, id:{}, scope:{},  manifest:{}, "\
               "seqno:{}".format(response['vbucket'], response['streamId'], cid, sid, uid, response['by_seqno'])
-        manifest['uid'] = format(uid, 'x')
+        manifest['uid'] = uid
         collections = []
         for e in manifest['scopes']:
+            update=False
             for c in e['collections']:
-                if c['uid'] != format(cid, 'x'):
+                if c['uid'] != cid:
                     collections.append(c)
-            e['collections'] = collections
+                    update=True
+            if update:
+                e['collections'] = collections
+                break
 
     elif response['event'] == EVENT_CREATE_SCOPE:
         uid, sid = struct.unpack(">QI", response['value'])
-        print "DCP Event: vb:{}, sid:{}, Scope \"{}\" id:{}, from manifest:{} CREATED at "\
+        uid = format(uid, 'x')
+        sid = format(sid, 'x')
+        print "DCP Event: vb:{}, sid:{}, what:ScopeCREATED, name:\"{}\", id:{}, manifest:{}, "\
               "seqno:{}".format(response['vbucket'],
                 response['streamId'],
                                  response['key'],
@@ -117,8 +132,8 @@ def handleSystemEvent(response, manifest):
                                  response['by_seqno'])
 
         # Record the scope
-        manifest['uid'] = format(uid, 'x')
-        manifest['scopes'].append({'uid':format(sid, 'x'),
+        manifest['uid'] = uid
+        manifest['scopes'].append({'uid':sid,
                                    'name':response['key'],
                                    'collections':[]})
 
@@ -126,12 +141,14 @@ def handleSystemEvent(response, manifest):
         # We can receive delete scope without a corresponding create, this
         # will happen when only the tombstone of a scope remains
         uid, sid = struct.unpack(">QI", response['value'])
-        print "DCP Event: vb:{}, sid:{}, Scope id:{}, from manifest:{} DROPPED at "\
+        uid = format(uid, 'x')
+        sid = format(sid, 'x')
+        print "DCP Event: vb:{}, sid:{}, what:ScopeDROPPED, id:{}, manifest:{}, "\
               "seqno:{}".format(response['vbucket'], response['streamId'], sid, uid, response['by_seqno'])
-        manifest['uid'] = format(uid, 'x')
+        manifest['uid'] = uid
         scopes = []
         for e in manifest['scopes']:
-            if e['uid'] != format(sid, 'x'):
+            if e['uid'] != sid:
                 scopes.append(e)
         manifest['scopes'] = scopes
     else:
