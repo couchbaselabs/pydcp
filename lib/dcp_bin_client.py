@@ -391,7 +391,7 @@ class OpenConsumer(Open):
     """ Open consumer spec """
 
     def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_CONSUMER, json='')
+        Open.__init__(self, name, FLAG_OPEN_CONSUMER)
 
 
 class OpenProducer(Open):
