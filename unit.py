@@ -3035,6 +3035,7 @@ class McdTestCase(ParametrizedTestCase):
         except Exception as ex:
             assert ex.status == ERR_NOT_MY_VBUCKET
 
+    @unittest.skip("tap stats removed")
     def test_stats_tap(self):
         resp = self.mcd_client.stats('tap')
         assert resp['ep_tap_backoff_period'] == '5'
