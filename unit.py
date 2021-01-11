@@ -215,8 +215,11 @@ class ParametrizedTestCase(unittest.TestCase):
 
         result = self._execute_command( cmd )
         if self.os_type == 'linux':
-           #return int(result.split('\n')[2].split(':')[1])
-           return int(result[2].split('\n')[0].split(':')[1])
+            # return int(result.split('\n')[2].split(':')[1])
+            # return int(result[2].split('\n')[0].split(':')[1])
+            for t_res in result:
+                if "update_seq:" in t_res:
+                    return int(t_res.strip().split(":")[1])
         elif self.os_type == 'windows':
            return int(result[2].split(':')[1])
 
