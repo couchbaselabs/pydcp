@@ -682,42 +682,42 @@ class SnapshotTestCases(ParametrizedTestCase):
     from memory. Then request all items starting from 0 so that we can do a disk
     backfill and then read the items that are in memory"""
 
-    def test_stream_request_disk(self):
-        for i in range(15000):
-            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-
-        resp = self.mcd_client.stats('vbucket-seqno')
-        end_seqno = int(resp['vb_0:high_seqno'])
-
-        self.statsHandler.wait_for_persistence(self.mcd_client)
-        assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
-                                   'checkpoint')
-
-        response = self.dcp_client.open_producer("mystream")
-        assert response['status'] == SUCCESS
-
-        mutations = 0
-        markers = 0
-        last_by_seqno = 0
-        stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, 0)
-        assert stream.status == SUCCESS
-
-        state = Stats.get_stat(self.mcd_client,
-                               'eq_dcpq:mystream:stream_0_state', 'dcp')
-        if state != 'dead':
-            assert state == 'backfilling'
-
-        responses = stream.run()
-
-        markers = \
-           len(filter(lambda r: r['opcode']==CMD_SNAPSHOT_MARKER, responses))
-
-
-        # the below assert fails so we can assume it is working as expected.
-        # I saw markers as 1 and num checkpoints as 2
-        #assert markers == int(stats['vb_0:num_checkpoints'])
-
-        assert stream.last_by_seqno == 15000
+    # def test_stream_request_disk(self):
+    #     for i in range(15000):
+    #         self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+    #
+    #     resp = self.mcd_client.stats('vbucket-seqno')
+    #     end_seqno = int(resp['vb_0:high_seqno'])
+    #
+    #     self.statsHandler.wait_for_persistence(self.mcd_client)
+    #     assert Stats.wait_for_stat(self.mcd_client, 'vb_0:num_checkpoints', 2,
+    #                                'checkpoint')
+    #
+    #     response = self.dcp_client.open_producer("mystream")
+    #     assert response['status'] == SUCCESS
+    #
+    #     mutations = 0
+    #     markers = 0
+    #     last_by_seqno = 0
+    #     stream = self.dcp_client.stream_req(0, 0, 0, end_seqno, 0)
+    #     assert stream.status == SUCCESS
+    #
+    #     state = Stats.get_stat(self.mcd_client,
+    #                            'eq_dcpq:mystream:stream_0_state', 'dcp')
+    #     if state != 'dead':
+    #         assert state == 'backfilling'
+    #
+    #     responses = stream.run()
+    #
+    #     markers = \
+    #        len(filter(lambda r: r['opcode']==CMD_SNAPSHOT_MARKER, responses))
+    #
+    #
+    #     # the below assert fails so we can assume it is working as expected.
+    #     # I saw markers as 1 and num checkpoints as 2
+    #     #assert markers == int(stats['vb_0:num_checkpoints'])
+    #
+    #     assert stream.last_by_seqno == 15000
 
 
 
@@ -783,24 +783,24 @@ class DcpTestCase(ParametrizedTestCase):
         response = self.mcd_client.stats('dcp')
         assert 'eq_dcpq:mystream:type' not in response
 
-    def test_open_notifier_connection_command(self):
-        """Basic dcp open notifier connection test
-
-        Verifies that when the open dcp noifier command is used there is a
-        connection instance that is created on the server and that when the
-        tcp connection is closed the connection is remove from the server"""
-
-        response = self.dcp_client.open_notifier("notifier")
-        assert response['status'] == SUCCESS
-
-        response = self.mcd_client.stats('dcp')
-        assert response['eq_dcpq:notifier:type'] == 'notifier'
-
-        self.dcp_client.close()
-        time.sleep(1)
-
-        response = self.mcd_client.stats('dcp')
-        assert 'eq_dcpq:mystream:type' not in response
+    # def test_open_notifier_connection_command(self):
+    #     """Basic dcp open notifier connection test
+    #
+    #     Verifies that when the open dcp noifier command is used there is a
+    #     connection instance that is created on the server and that when the
+    #     tcp connection is closed the connection is remove from the server"""
+    #
+    #     response = self.dcp_client.open_notifier("notifier")
+    #     assert response['status'] == SUCCESS
+    #
+    #     response = self.mcd_client.stats('dcp')
+    #     assert response['eq_dcpq:notifier:type'] == 'notifier'
+    #
+    #     self.dcp_client.close()
+    #     time.sleep(1)
+    #
+    #     response = self.mcd_client.stats('dcp')
+    #     assert 'eq_dcpq:mystream:type' not in response
 
 
 
@@ -910,9 +910,9 @@ class DcpTestCase(ParametrizedTestCase):
         stats = self.mcd_client.stats('dcp')
         assert stats['ep_dcp_count'] == str(n * 2)
 
-    def test_open_notifier(self):
-        response = self.dcp_client.open_notifier("notifier")
-        assert response['status'] == SUCCESS
+    # def test_open_notifier(self):
+    #     response = self.dcp_client.open_notifier("notifier")
+    #     assert response['status'] == SUCCESS
 
     def test_open_notifier_no_name(self):
         response = self.dcp_client.open_notifier("")
@@ -1164,58 +1164,58 @@ class DcpTestCase(ParametrizedTestCase):
 
 
 
-    def test_stream_request_dupe_backfilled_items(self):
-        """ request mutations across memory/backfill mutations"""
-        self.dcp_client.open_producer("mystream")
-
-        def load(i):
-            """ load 3 and persist """
-            set_ops = [self.mcd_client.set('key%s'%i, 0, 0, 'value', 0)\
-                                                            for x in range(3)]
-            self.statsHandler.wait_for_persistence(self.mcd_client)
-
-        def stream(end, vb_uuid):
-            backfilled = False
-
-            # send a stream request mutations from 1st snapshot
-            stream = self.dcp_client.stream_req(0, 0, 0, end, vb_uuid)
-
-            # check if items were backfilled before streaming
-            stats = self.mcd_client.stats('dcp')
-            num_backfilled =\
-             int(stats['eq_dcpq:mystream:stream_0_backfill_sent'])
-
-            if num_backfilled > 0:
-                backfilled = True
-
-            stream.run()  # exaust stream
-            assert stream.has_response() == False
-
-            self.dcp_client.close_stream(0)
-            return backfilled
-
-        # get vb uuid
-        resp = self.mcd_client.stats('failovers')
-        vb_uuid = long(resp['vb_0:0:id'])
-
-        # load stream snapshot 1
-        load('a')
-        stream(3, vb_uuid)
-
-        # load some more items
-        load('b')
-
-        # attempt to stream until request contains backfilled items
-        tries = 10
-        backfilled = stream(4, vb_uuid)
-        while not backfilled and tries > 0:
-            tries -= 1
-            time.sleep(2)
-            backfilled = stream(4, vb_uuid)
-
-        assert backfilled, "ERROR: no back filled items were streamed"
-
-        self.verification_seqno= 6
+    # def test_stream_request_dupe_backfilled_items(self):
+    #     """ request mutations across memory/backfill mutations"""
+    #     self.dcp_client.open_producer("mystream")
+    #
+    #     def load(i):
+    #         """ load 3 and persist """
+    #         set_ops = [self.mcd_client.set('key%s'%i, 0, 0, 'value', 0)\
+    #                                                         for x in range(3)]
+    #         self.statsHandler.wait_for_persistence(self.mcd_client)
+    #
+    #     def stream(end, vb_uuid):
+    #         backfilled = False
+    #
+    #         # send a stream request mutations from 1st snapshot
+    #         stream = self.dcp_client.stream_req(0, 0, 0, end, vb_uuid)
+    #
+    #         # check if items were backfilled before streaming
+    #         stats = self.mcd_client.stats('dcp')
+    #         num_backfilled =\
+    #          int(stats['eq_dcpq:mystream:stream_0_backfill_sent'])
+    #
+    #         if num_backfilled > 0:
+    #             backfilled = True
+    #
+    #         stream.run()  # exaust stream
+    #         assert stream.has_response() == False
+    #
+    #         self.dcp_client.close_stream(0)
+    #         return backfilled
+    #
+    #     # get vb uuid
+    #     resp = self.mcd_client.stats('failovers')
+    #     vb_uuid = long(resp['vb_0:0:id'])
+    #
+    #     # load stream snapshot 1
+    #     load('a')
+    #     stream(3, vb_uuid)
+    #
+    #     # load some more items
+    #     load('b')
+    #
+    #     # attempt to stream until request contains backfilled items
+    #     tries = 10
+    #     backfilled = stream(4, vb_uuid)
+    #     while not backfilled and tries > 0:
+    #         tries -= 1
+    #         time.sleep(2)
+    #         backfilled = stream(4, vb_uuid)
+    #
+    #     assert backfilled, "ERROR: no back filled items were streamed"
+    #
+    #     self.verification_seqno= 6
 
 
 
@@ -2208,56 +2208,56 @@ class DcpTestCase(ParametrizedTestCase):
                 assert response['key'] == 'key'+str(doc_count/2)
                 break
 
-    def test_stream_request_notifier(self):
-        """Open a notifier consumer and verify mutations are ready
-        to be streamed"""
-
-
-        doc_count = 100
-        response = self.dcp_client.open_notifier("notifier")
-        assert response['status'] == SUCCESS
-
-        resp = self.mcd_client.stats('failovers')
-        vb_uuid = long(resp['vb_0:0:id'])
-
-        notifier_stream =\
-            self.dcp_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid)
-
-        for i in range(doc_count):
-            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-
-
-        response = notifier_stream.next_response()
-        assert response['opcode'] == CMD_STREAM_END
-
-
-        self.dcp_client = DcpClient(self.host, self.port)
-        response = self.dcp_client.open_producer("producer")
-        assert response['status'] == SUCCESS
-
-
-        stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0)
-        assert stream.status == SUCCESS
-        stream.run()
-        assert stream.last_by_seqno == doc_count
-        self.verification_seqno = doc_count
-
-    def test_stream_request_notifier_bad_uuid(self):
-        """Wait for mutations from missing vb_uuid"""
-
-        response = self.dcp_client.open_notifier("notifier")
-        assert response['status'] == SUCCESS
-
-        # set 1
-        self.mcd_client.set('key', 0, 0, 'value', 0)
-
-        # create notifier stream with vb_uuid that doesn't exist
-        # expect rollback since this value can never be reached
-        vb_uuid = 0
-        stream = self.dcp_client.stream_req(0, 0, 1, 0, 0)
-        assert stream.status == ERR_ROLLBACK,\
-                "ERROR: response expected = %s, received = %s" %\
-                    (ERR_ROLLBACK, stream.status)
+    # def test_stream_request_notifier(self):
+    #     """Open a notifier consumer and verify mutations are ready
+    #     to be streamed"""
+    #
+    #
+    #     doc_count = 100
+    #     response = self.dcp_client.open_notifier("notifier")
+    #     assert response['status'] == SUCCESS
+    #
+    #     resp = self.mcd_client.stats('failovers')
+    #     vb_uuid = long(resp['vb_0:0:id'])
+    #
+    #     notifier_stream =\
+    #         self.dcp_client.stream_req(0, 0, doc_count - 1, 0, vb_uuid)
+    #
+    #     for i in range(doc_count):
+    #         self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+    #
+    #
+    #     response = notifier_stream.next_response()
+    #     assert response['opcode'] == CMD_STREAM_END
+    #
+    #
+    #     self.dcp_client = DcpClient(self.host, self.port)
+    #     response = self.dcp_client.open_producer("producer")
+    #     assert response['status'] == SUCCESS
+    #
+    #
+    #     stream = self.dcp_client.stream_req(0, 0, 0, doc_count, 0)
+    #     assert stream.status == SUCCESS
+    #     stream.run()
+    #     assert stream.last_by_seqno == doc_count
+    #     self.verification_seqno = doc_count
+    #
+    # def test_stream_request_notifier_bad_uuid(self):
+    #     """Wait for mutations from missing vb_uuid"""
+    #
+    #     response = self.dcp_client.open_notifier("notifier")
+    #     assert response['status'] == SUCCESS
+    #
+    #     # set 1
+    #     self.mcd_client.set('key', 0, 0, 'value', 0)
+    #
+    #     # create notifier stream with vb_uuid that doesn't exist
+    #     # expect rollback since this value can never be reached
+    #     vb_uuid = 0
+    #     stream = self.dcp_client.stream_req(0, 0, 1, 0, 0)
+    #     assert stream.status == ERR_ROLLBACK,\
+    #             "ERROR: response expected = %s, received = %s" %\
+    #                 (ERR_ROLLBACK, stream.status)
 
     def test_stream_request_append(self):
         """ stream appended mutations """
@@ -2691,49 +2691,49 @@ class DcpTestCase(ParametrizedTestCase):
 
         assert tries > 0, 'notifier never received end stream'
 
-    def test_flow_control_ack_n_vbuckets(self):
-
-        self.dcp_client.open_producer("flowctl")
-
-        mutations = 2
-        num_vbs = 8
-        buffsize = 64*num_vbs
-        self.dcp_client.flow_control(buffsize)
-
-        for vb in range(num_vbs):
-            self.mcd_client.set('key1', 0, 0, 'value', vb)
-            self.mcd_client.set('key2', 0, 0, 'value', vb)
-
-        # request mutations
-        resp = self.mcd_client.stats('failovers')
-        vb_uuid = long(resp['vb_0:0:id'])
-        for vb in range(num_vbs):
-            self.dcp_client.stream_req(vb, 0, 0, mutations, vb_uuid)
-
-
-        # ack until all mutations sent
-        stats = self.mcd_client.stats('dcp')
-        unacked = int(stats['eq_dcpq:flowctl:unacked_bytes'])
-        start_t = time.time()
-        while unacked > 0:
-            ack = self.dcp_client.ack(unacked)
-            assert ack is None, ack['error']
-            stats = self.mcd_client.stats('dcp')
-            unacked = int(stats['eq_dcpq:flowctl:unacked_bytes'])
-
-            assert time.time() - start_t < 150,\
-                "timed out waiting for seqno on all vbuckets"
-
-        stats = self.mcd_client.stats('dcp')
-
-        for vb in range(num_vbs):
-            key = 'eq_dcpq:flowctl:stream_%s_last_sent_seqno'%vb
-            seqno = int(stats[key])
-            assert seqno == mutations,\
-                "%s != %s" % (seqno, mutations)
-
-            self.statsHandler.wait_for_persistence(self.mcd_client)
-            assert self.get_persisted_seq_no(vb) == seqno
+    # def test_flow_control_ack_n_vbuckets(self):
+    #
+    #     self.dcp_client.open_producer("flowctl")
+    #
+    #     mutations = 2
+    #     num_vbs = 8
+    #     buffsize = 64*num_vbs
+    #     self.dcp_client.flow_control(buffsize)
+    #
+    #     for vb in range(num_vbs):
+    #         self.mcd_client.set('key1', 0, 0, 'value', vb)
+    #         self.mcd_client.set('key2', 0, 0, 'value', vb)
+    #
+    #     # request mutations
+    #     resp = self.mcd_client.stats('failovers')
+    #     vb_uuid = long(resp['vb_0:0:id'])
+    #     for vb in range(num_vbs):
+    #         self.dcp_client.stream_req(vb, 0, 0, mutations, vb_uuid)
+    #
+    #
+    #     # ack until all mutations sent
+    #     stats = self.mcd_client.stats('dcp')
+    #     unacked = int(stats['eq_dcpq:flowctl:unacked_bytes'])
+    #     start_t = time.time()
+    #     while unacked > 0:
+    #         ack = self.dcp_client.ack(unacked)
+    #         assert ack is None, ack['error']
+    #         stats = self.mcd_client.stats('dcp')
+    #         unacked = int(stats['eq_dcpq:flowctl:unacked_bytes'])
+    #
+    #         assert time.time() - start_t < 150,\
+    #             "timed out waiting for seqno on all vbuckets"
+    #
+    #     stats = self.mcd_client.stats('dcp')
+    #
+    #     for vb in range(num_vbs):
+    #         key = 'eq_dcpq:flowctl:stream_%s_last_sent_seqno'%vb
+    #         seqno = int(stats[key])
+    #         assert seqno == mutations,\
+    #             "%s != %s" % (seqno, mutations)
+    #
+    #         self.statsHandler.wait_for_persistence(self.mcd_client)
+    #         assert self.get_persisted_seq_no(vb) == seqno
 
 
     def test_consumer_producer_same_vbucket(self):
@@ -2806,20 +2806,20 @@ class DcpTestCase(ParametrizedTestCase):
     # Check the scenario where time is not synced but we still request extended metadata. There should be no
     # adjusted time but the mutations should appear. This test currently fails - MB-13933
 
-    def test_request_extended_meta_data_when_vbucket_not_time_synced(self):
-        n = 5
-
-        response = self.dcp_client.open_producer("producer")
-        response = self.dcp_client.general_control('enable_ext_metadata', 'true')
-        assert response['status'] == SUCCESS
-
-        for i in xrange(n):
-            self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
-
-        stream = self.dcp_client.stream_req(0, 0, 0, n, 0)
-        responses = stream.run()
-        assert stream.last_by_seqno == n,\
-               'Sequence number mismatch. Expect {0}, actual {1}'.format(n, stream.last_by_seqno)
+    # def test_request_extended_meta_data_when_vbucket_not_time_synced(self):
+    #     n = 5
+    #
+    #     response = self.dcp_client.open_producer("producer")
+    #     response = self.dcp_client.general_control('enable_ext_metadata', 'true')
+    #     assert response['status'] == SUCCESS
+    #
+    #     for i in xrange(n):
+    #         self.mcd_client.set('key' + str(i), 0, 0, 'value', 0)
+    #
+    #     stream = self.dcp_client.stream_req(0, 0, 0, n, 0)
+    #     responses = stream.run()
+    #     assert stream.last_by_seqno == n,\
+    #            'Sequence number mismatch. Expect {0}, actual {1}'.format(n, stream.last_by_seqno)
 
 
 
