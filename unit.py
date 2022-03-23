@@ -1219,30 +1219,30 @@ class DcpTestCase(ParametrizedTestCase):
 
 
 
-    def test_backfill_from_default_vb_uuid(self):
-        """ attempt a backfill stream request using vb_uuid = 0 """
+#     def test_backfill_from_default_vb_uuid(self):
+#         """ attempt a backfill stream request using vb_uuid = 0 """
 
-        def disk_stream():
-            stream = self.dcp_client.stream_req(0, 0, 0, 1, 0)
-            last_by_seqno = 0
-            persisted = False
+#         def disk_stream():
+#             stream = self.dcp_client.stream_req(0, 0, 0, 1, 0)
+#             last_by_seqno = 0
+#             persisted = False
 
-            assert stream.status is SUCCESS
-            snap = stream.next_response()
-            if snap['flag'].find('disk') == 0:
-                persisted = True
+#             assert stream.status is SUCCESS
+#             snap = stream.next_response()
+#             if snap['flag'].find('disk') == 0:
+#                 persisted = True
 
-            return persisted
+#             return persisted
 
-        self.dcp_client.open_producer("mystream")
-        self.mcd_client.set('key', 0, 0, 'value', 0)
+#         self.dcp_client.open_producer("mystream")
+#         self.mcd_client.set('key', 0, 0, 'value', 0)
 
-        tries = 20
-        while tries > 0 and not disk_stream():
-            tries -= 1
-            time.sleep(1)
+#         tries = 20
+#         while tries > 0 and not disk_stream():
+#             tries -= 1
+#             time.sleep(1)
 
-        assert tries > 0, "Items never persisted to disk"
+#         assert tries > 0, "Items never persisted to disk"
 
     """Close stream that has not been initialized.
     Expects client error."""
