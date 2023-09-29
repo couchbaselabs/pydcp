@@ -8,7 +8,7 @@ Currently only python2 supported.
 In a terminal:
 ```
 cd /path/to/pydcp
-python simple_dcp_client.py <arguments>
+./simple_dcp_client.py <arguments>
 ```
 ##### Arguments:
 * Username `-u` Username for creating the DCP connection
